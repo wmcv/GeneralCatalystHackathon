@@ -18,6 +18,8 @@ const capability: SemanticCapability = {
   scope: "organization",
   createdAt: "2026-09-15T15:11:47.648Z",
   successfulUses: 0,
+  deterministicUses: 0,
+  executionState: "semantic",
   sourceExample: { product_type: "mechanical keyboards" },
 };
 
@@ -38,5 +40,38 @@ describe("capability registry", () => {
     registry.addCapability({ ...capability, description: "Duplicate" });
     expect(registry.listCapabilities()).toHaveLength(1);
     expect(registry.incrementSuccessfulUses(capability.id).successfulUses).toBe(1);
+  });
+
+  it("records deterministic and successful usage together", () => {
+    registry.addCapability(capability);
+    const updated = registry.incrementDeterministicUses(
+      capability.id,
+      "2026-09-15T16:00:00.000Z",
+    );
+    expect(updated).toMatchObject({
+      successfulUses: 1,
+      deterministicUses: 1,
+      lastUsedAt: "2026-09-15T16:00:00.000Z",
+    });
+  });
+
+  it("marks deterministic readiness only after entering learning", () => {
+    registry.addCapability(capability);
+    expect(() => registry.markDeterministicReady(capability.id)).toThrow(
+      "has no cached execution awaiting validation",
+    );
+
+    registry.beginDeterministicLearning(capability.id, {
+      provider: "browser-use-v3",
+      mode: "cached-script",
+      workspaceId: "workspace-1",
+      taskTemplate: "Research @{{product_type}}.",
+      cacheScript: true,
+      autoHeal: false,
+    });
+    expect(registry.markDeterministicReady(capability.id)).toMatchObject({
+      executionState: "deterministic_ready",
+      execution: { deterministicReady: true },
+    });
   });
 });

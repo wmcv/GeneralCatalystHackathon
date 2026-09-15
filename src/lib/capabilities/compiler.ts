@@ -89,6 +89,8 @@ export function compileProductResearchCapability(
     scope: "organization",
     createdAt: run.completedAt ?? new Date().toISOString(),
     successfulUses: 0,
+    deterministicUses: 0,
+    executionState: "semantic",
     sourceExample: {
       product_type: "mechanical keyboards",
       max_price: 180,

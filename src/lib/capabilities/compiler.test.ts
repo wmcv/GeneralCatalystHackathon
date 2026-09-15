@@ -38,6 +38,8 @@ describe("capability compiler", () => {
       "product_type", "max_price", "currency", "use_case", "result_count",
     ]);
     expect(capability.strategy).toHaveLength(5);
+    expect(capability.executionState).toBe("semantic");
+    expect(capability.execution).toBeUndefined();
     expect(capability.sourceExample).toEqual({
       product_type: "mechanical keyboards",
       max_price: 180,
@@ -49,9 +51,9 @@ describe("capability compiler", () => {
 
   it("contains no Browser Use implementation details", () => {
     const capability = compileProductResearchCapability(completedRun, structuredResult, "Agent 01");
-    const serialized = JSON.stringify(capability).toLowerCase();
+    const serialized = JSON.stringify({ ...capability, execution: undefined }).toLowerCase();
 
-    expect(serialized).not.toMatch(/browser\.ready|core\.event|selector|coordinate/);
+    expect(serialized).not.toMatch(/browser-use|cache_script|browser\.ready|core\.event|selector|coordinate/);
   });
 
   it("uses a stable capability id when the same run is compiled twice", () => {

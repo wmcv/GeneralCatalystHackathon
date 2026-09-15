@@ -44,6 +44,8 @@ const capability: SemanticCapability = {
   scope: "organization",
   createdAt: "2026-09-15T15:11:47.648Z",
   successfulUses: 0,
+  deterministicUses: 0,
+  executionState: "semantic",
   sourceExample: {},
 };
 
