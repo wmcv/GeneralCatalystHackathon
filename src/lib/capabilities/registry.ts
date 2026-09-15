@@ -13,6 +13,8 @@ export interface CapabilityRegistry {
   findByFamily(family: string): SemanticCapability[];
   beginDeterministicLearning(id: string, execution: PendingExecution): SemanticCapability;
   markDeterministicReady(id: string): SemanticCapability;
+  markDeterministicUnready(id: string): SemanticCapability;
+  markDeterministicLearningFailed(id: string): SemanticCapability;
   incrementSuccessfulUses(id: string): SemanticCapability;
   incrementDeterministicUses(id: string, usedAt?: string): SemanticCapability;
   clearForTests(): void;
@@ -54,6 +56,28 @@ export function createInMemoryCapabilityRegistry(
         ...capability,
         executionState: "deterministic_ready",
         execution: { ...capability.execution, deterministicReady: true },
+      });
+      capabilities.set(id, updated);
+      return updated;
+    },
+    markDeterministicUnready(id) {
+      const capability = capabilities.get(id);
+      if (!capability?.execution) throw new Error(`Capability ${id} has no deterministic execution.`);
+      const updated = semanticCapabilitySchema.parse({
+        ...capability,
+        executionState: "learning",
+        execution: { ...capability.execution, deterministicReady: false },
+      });
+      capabilities.set(id, updated);
+      return updated;
+    },
+    markDeterministicLearningFailed(id) {
+      const capability = capabilities.get(id);
+      if (!capability) throw new Error(`Unknown capability ${id}.`);
+      const updated = semanticCapabilitySchema.parse({
+        ...capability,
+        execution: undefined,
+        executionState: "semantic",
       });
       capabilities.set(id, updated);
       return updated;

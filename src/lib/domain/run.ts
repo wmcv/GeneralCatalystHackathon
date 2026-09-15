@@ -15,6 +15,10 @@ export const replayRunSchema = z.object({
   requestingAgentId: z.string().min(1).optional(),
   capabilityId: z.string().min(1).optional(),
   capabilityName: z.string().min(1).optional(),
+  executionPhase: z.enum(["learning", "deterministic_reuse"]).optional(),
+  llmCostUsd: z.number().nonnegative().optional(),
+  browserCostUsd: z.number().nonnegative().optional(),
+  proxyCostUsd: z.number().nonnegative().optional(),
 });
 
 export type ReplayRun = z.infer<typeof replayRunSchema>;

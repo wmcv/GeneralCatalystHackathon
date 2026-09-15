@@ -5,6 +5,7 @@ import type {
   BrowserUseCachedScriptExecution,
   SemanticCapability,
 } from "../domain/capability";
+import type { RunStore } from "../state/run-store";
 
 export type DeterministicParameters = Record<string, string | number | boolean>;
 
@@ -19,6 +20,8 @@ export interface DeterministicBrowserOutcome {
   browserCostUsd: string | null;
   proxyCostUsd: string | null;
   totalCostUsd: string | null;
+  messages: Array<{ type: string; summary: string; data: string }>;
+  scriptGenerated: boolean;
   rawResult: unknown;
   structuredResult: BrowserUseSpikeResult | null;
   validationError: string | null;
@@ -27,6 +30,7 @@ export interface DeterministicBrowserOutcome {
 
 export interface DeterministicExecutionResult extends DeterministicBrowserOutcome {
   matched: boolean;
+  deterministicSuccess: boolean;
   routeDecision: CapabilityRouteDecision;
   capabilityId: string | null;
   capabilityName: string | null;
@@ -36,6 +40,7 @@ export interface DeterministicExecutionResult extends DeterministicBrowserOutcom
 
 export interface DeterministicExecutorDependencies {
   registry: CapabilityRegistry;
+  runStore?: RunStore;
   runBrowserUseV3(
     execution: BrowserUseCachedScriptExecution,
     task: string,
@@ -53,11 +58,24 @@ const notStarted: DeterministicBrowserOutcome = {
   browserCostUsd: null,
   proxyCostUsd: null,
   totalCostUsd: null,
+  messages: [],
+  scriptGenerated: false,
   rawResult: null,
   structuredResult: null,
   validationError: null,
   error: null,
 };
+
+export function renderParameterizedTaskTemplate(
+  taskTemplate: string,
+  parameters: DeterministicParameters,
+): string {
+  return taskTemplate.replace(/@\{\{([a-z_][a-z0-9_]*)\}\}/gi, (_, name: string) => {
+    const value = parameters[name];
+    if (value === undefined) throw new Error(`Missing task-template parameter ${name}.`);
+    return `@{{${String(value)}}}`;
+  });
+}
 
 export function renderCachedScriptTask(
   capability: SemanticCapability,
@@ -74,11 +92,7 @@ export function renderCachedScriptTask(
     }
   }
 
-  return execution.taskTemplate.replace(/@\{\{([a-z_][a-z0-9_]*)\}\}/gi, (_, name: string) => {
-    const value = parameters[name];
-    if (value === undefined) throw new Error(`Missing task-template parameter ${name}.`);
-    return `@{{${String(value)}}}`;
-  });
+  return renderParameterizedTaskTemplate(execution.taskTemplate, parameters);
 }
 
 function rejected(
@@ -89,6 +103,7 @@ function rejected(
   return {
     ...notStarted,
     matched: false,
+    deterministicSuccess: false,
     routeDecision: reason ? { matched: false, reason } : routeDecision,
     capabilityId: null,
     capabilityName: null,
@@ -117,7 +132,18 @@ export async function executeRoutedDeterministicCapability(
   const structuredResult = browserUseSpikeResultSchema.safeParse(outcome.structuredResult);
   const expectedCount = Number(routeDecision.parameters.result_count);
   const countMatches = structuredResult.success && structuredResult.data.products.length === expectedCount;
-  const succeeded = outcome.isTaskSuccessful === true && structuredResult.success && countMatches;
+  const validationError = outcome.validationError ?? (
+    structuredResult.success && !countMatches
+      ? `Expected ${expectedCount} products but received ${structuredResult.data.products.length}.`
+      : null
+  );
+  const succeeded =
+    outcome.status === "stopped" &&
+    outcome.isTaskSuccessful !== false &&
+    outcome.error === null &&
+    structuredResult.success &&
+    countMatches &&
+    validationError === null;
   const deterministicallySucceeded =
     succeeded &&
     outcome.totalInputTokens === 0 &&
@@ -126,10 +152,38 @@ export async function executeRoutedDeterministicCapability(
 
   if (deterministicallySucceeded) dependencies.registry.incrementDeterministicUses(capability.id);
   else if (succeeded) dependencies.registry.incrementSuccessfulUses(capability.id);
+  else dependencies.registry.markDeterministicUnready(capability.id);
+
+  if (dependencies.runStore && outcome.sessionId) {
+    const completedAt = new Date();
+    dependencies.runStore.save({
+      id: outcome.sessionId,
+      task: input.task,
+      mode: "replay",
+      status: succeeded ? "completed" : "failed",
+      startedAt: new Date(completedAt.getTime() - outcome.elapsedMs).toISOString(),
+      completedAt: completedAt.toISOString(),
+      browserUseRunId: outcome.sessionId,
+      durationMs: outcome.elapsedMs,
+      ...(outcome.totalInputTokens === null ? {} : { totalInputTokens: outcome.totalInputTokens }),
+      ...(outcome.totalOutputTokens === null ? {} : { totalOutputTokens: outcome.totalOutputTokens }),
+      ...(outcome.totalCostUsd === null ? {} : { totalCostUsd: Number(outcome.totalCostUsd) }),
+      requestingAgentId: input.requestingAgentId,
+      capabilityId: capability.id,
+      capabilityName: capability.name,
+      executionPhase: "deterministic_reuse",
+      ...(outcome.llmCostUsd === null ? {} : { llmCostUsd: Number(outcome.llmCostUsd) }),
+      ...(outcome.browserCostUsd === null ? {} : { browserCostUsd: Number(outcome.browserCostUsd) }),
+      ...(outcome.proxyCostUsd === null ? {} : { proxyCostUsd: Number(outcome.proxyCostUsd) }),
+    });
+    if (succeeded) dependencies.runStore.saveResult(outcome.sessionId, outcome.structuredResult);
+  }
 
   return {
     ...outcome,
+    validationError,
     matched: true,
+    deterministicSuccess: deterministicallySucceeded,
     routeDecision,
     capabilityId: capability.id,
     capabilityName: capability.name,

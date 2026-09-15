@@ -1,6 +1,6 @@
 import "server-only";
 
-import { BrowserUse, type SessionResult } from "browser-use-sdk/v3";
+import { BrowserUse, type MessageResponse, type SessionResult } from "browser-use-sdk/v3";
 import type { BrowserUseCachedScriptExecution } from "../domain/capability";
 import type { DeterministicBrowserOutcome } from "../replay/deterministic-executor";
 import { browserUseConfig, getBrowserUseEnv } from "./config";
@@ -46,8 +46,10 @@ export async function runDeterministicBrowserUseV3(
 
   let result: SessionResult | null = null;
   let error: string | null = null;
+  const messages: MessageResponse[] = [];
   try {
-    result = await run;
+    for await (const runMessage of run) messages.push(runMessage);
+    result = run.result;
   } catch (runError) {
     error = message(runError);
   } finally {
@@ -77,6 +79,10 @@ export async function runDeterministicBrowserUseV3(
     browserCostUsd: result?.browserCostUsd ?? null,
     proxyCostUsd: result?.proxyCostUsd ?? null,
     totalCostUsd: result?.totalCostUsd ?? null,
+    messages: messages.map(({ type, summary, data }) => ({ type, summary, data })),
+    scriptGenerated: messages.some(
+      (item) => item.type === "code_execution" && /\/workspace\/scripts\//.test(item.data),
+    ),
     rawResult: result?.output ?? null,
     ...parsed,
     error,

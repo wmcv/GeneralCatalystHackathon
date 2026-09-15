@@ -55,6 +55,8 @@ const successfulOutcome: DeterministicBrowserOutcome = {
   browserCostUsd: "0.0003333333",
   proxyCostUsd: "0",
   totalCostUsd: "0.0003333333",
+  messages: [],
+  scriptGenerated: false,
   rawResult: {},
   structuredResult: {
     summary: "Four mice.",
@@ -132,6 +134,7 @@ describe("deterministic capability execution", () => {
     expect(registry.getCapabilityById(capability.id)).toMatchObject({
       successfulUses: 0,
       deterministicUses: 0,
+      executionState: "learning",
     });
   });
 

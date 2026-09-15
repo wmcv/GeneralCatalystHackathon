@@ -73,5 +73,9 @@ describe("capability registry", () => {
       executionState: "deterministic_ready",
       execution: { deterministicReady: true },
     });
+    expect(registry.markDeterministicUnready(capability.id)).toMatchObject({
+      executionState: "learning",
+      execution: { workspaceId: "workspace-1", deterministicReady: false },
+    });
   });
 });
