@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { runBrowserUseSpike } from "@/lib/browser-use/client";
 
 export const runtime = "nodejs";
-export const maxDuration = 900;
+export const maxDuration = 300;
 
 export async function POST() {
   const result = await runBrowserUseSpike();

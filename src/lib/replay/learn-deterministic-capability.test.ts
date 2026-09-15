@@ -6,6 +6,7 @@ import type { DeterministicBrowserOutcome } from "./deterministic-executor";
 import {
   confirmDeterministicLearning,
   learnDeterministicCapability,
+  resetStaleDeterministicLearning,
 } from "./learn-deterministic-capability";
 
 const semanticCapability: SemanticCapability = {
@@ -123,6 +124,18 @@ describe("deterministic capability learning", () => {
     });
   });
 
+  it("accepts a validated stopped run when the provider omits its success flag", async () => {
+    const result = await learnDeterministicCapability(semanticCapability, sourceParameters, {
+      registry,
+      runStore,
+      createWorkspace: vi.fn().mockResolvedValue({ id: "workspace-1" }),
+      deleteWorkspace: vi.fn(),
+      runBrowserUseV3: vi.fn().mockResolvedValue({ ...outcome, isTaskSuccessful: null }),
+    });
+
+    expect(result.deterministicReady).toBe(true);
+  });
+
   it("does not become ready and preserves the failed workspace for manual cleanup", async () => {
     const deleteWorkspace = vi.fn();
     const result = await learnDeterministicCapability(semanticCapability, sourceParameters, {
@@ -139,6 +152,52 @@ describe("deterministic capability learning", () => {
       execution: { workspaceId: "workspace-1", deterministicReady: false },
     });
     expect(deleteWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("cleans up stale failed learning before an explicit retry", async () => {
+    registry.beginDeterministicLearning(semanticCapability.id, {
+      provider: "browser-use-v3",
+      mode: "cached-script",
+      workspaceId: "stale-workspace",
+      taskTemplate: "Task @{{query}}",
+      cacheScript: true,
+      autoHeal: false,
+    });
+    const deleteWorkspace = vi.fn().mockResolvedValue(undefined);
+
+    await resetStaleDeterministicLearning(
+      registry.getCapabilityById(semanticCapability.id),
+      { registry, deleteWorkspace },
+    );
+
+    expect(deleteWorkspace).toHaveBeenCalledOnce();
+    expect(deleteWorkspace).toHaveBeenCalledWith("stale-workspace");
+    expect(registry.getCapabilityById(semanticCapability.id)).toMatchObject({
+      executionState: "semantic",
+    });
+    expect(registry.getCapabilityById(semanticCapability.id)?.execution).toBeUndefined();
+  });
+
+  it("does not touch a deterministic-ready capability", async () => {
+    registry.beginDeterministicLearning(semanticCapability.id, {
+      provider: "browser-use-v3",
+      mode: "cached-script",
+      workspaceId: "ready-workspace",
+      taskTemplate: "Task @{{query}}",
+      cacheScript: true,
+      autoHeal: false,
+    });
+    registry.markDeterministicReady(semanticCapability.id);
+    const deleteWorkspace = vi.fn();
+
+    await resetStaleDeterministicLearning(
+      registry.getCapabilityById(semanticCapability.id),
+      { registry, deleteWorkspace },
+    );
+
+    expect(deleteWorkspace).not.toHaveBeenCalled();
+    expect(registry.getCapabilityById(semanticCapability.id)?.executionState)
+      .toBe("deterministic_ready");
   });
 
   it("binds GitHub learning to the GitHub website surface", async () => {

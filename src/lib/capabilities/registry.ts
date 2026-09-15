@@ -17,6 +17,7 @@ export interface CapabilityRegistry {
   markDeterministicLearningFailed(id: string): SemanticCapability;
   incrementSuccessfulUses(id: string): SemanticCapability;
   incrementDeterministicUses(id: string, usedAt?: string): SemanticCapability;
+  removeCapability(id: string): boolean;
   clearForTests(): void;
 }
 
@@ -101,6 +102,7 @@ export function createInMemoryCapabilityRegistry(
       capabilities.set(id, updated);
       return updated;
     },
+    removeCapability: (id) => capabilities.delete(id),
     clearForTests() {
       capabilities.clear();
     },

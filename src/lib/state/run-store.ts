@@ -6,6 +6,7 @@ export interface RunStore {
   list(): ReplayRun[];
   save(run: ReplayRun): ReplayRun;
   saveResult(id: string, result: unknown): void;
+  removeByCapabilityId(capabilityId: string): number;
   clearForTests(): void;
 }
 
@@ -26,6 +27,16 @@ export function createInMemoryRunStore(
     saveResult(id, result) {
       if (!runs.has(id)) throw new Error(`Cannot save a result for unknown run ${id}.`);
       results.set(id, result);
+    },
+    removeByCapabilityId(capabilityId) {
+      const matchingIds = Array.from(runs.values())
+        .filter((run) => run.capabilityId === capabilityId)
+        .map((run) => run.id);
+      for (const id of matchingIds) {
+        runs.delete(id);
+        results.delete(id);
+      }
+      return matchingIds.length;
     },
     clearForTests() {
       runs.clear();

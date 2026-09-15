@@ -7,7 +7,7 @@ import { runStore } from "@/lib/state/run-store";
 import { acquireOperation, releaseOperation } from "@/lib/state/operation-lock";
 
 export const runtime = "nodejs";
-export const maxDuration = 900;
+export const maxDuration = 300;
 
 const requestSchema = z.object({
   task: z.string().min(1),

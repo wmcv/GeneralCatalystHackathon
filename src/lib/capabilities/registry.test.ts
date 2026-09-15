@@ -42,6 +42,13 @@ describe("capability registry", () => {
     expect(registry.incrementSuccessfulUses(capability.id).successfulUses).toBe(1);
   });
 
+  it("removes a capability from organization memory", () => {
+    registry.addCapability(capability);
+    expect(registry.removeCapability(capability.id)).toBe(true);
+    expect(registry.getCapabilityById(capability.id)).toBeUndefined();
+    expect(registry.listCapabilities()).toEqual([]);
+  });
+
   it("records deterministic and successful usage together", () => {
     registry.addCapability(capability);
     const updated = registry.incrementDeterministicUses(

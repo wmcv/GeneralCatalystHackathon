@@ -12,12 +12,13 @@ import { extractGitHubRepositoryResearchParameters } from "@/lib/capabilities/ro
 import {
   confirmDeterministicLearning,
   learnDeterministicCapability,
+  resetStaleDeterministicLearning,
 } from "@/lib/replay/learn-deterministic-capability";
 import { runStore } from "@/lib/state/run-store";
 import { acquireOperation, releaseOperation } from "@/lib/state/operation-lock";
 
 export const runtime = "nodejs";
-export const maxDuration = 900;
+export const maxDuration = 300;
 
 const parameterSchema = z.union([z.string(), z.number(), z.boolean()]);
 const requestSchema = z.object({
@@ -75,10 +76,15 @@ export async function POST(request: Request) {
         { status: 422 },
       );
     }
-    const capability = capabilityRegistry.addCapability(semanticCapabilitySchema.parse({
+    const submittedCapability = semanticCapabilitySchema.parse({
       ...input.capability,
       sourceExample: sourceParameters,
-    }));
+    });
+    await resetStaleDeterministicLearning(
+      capabilityRegistry.getCapabilityById(submittedCapability.id),
+      { registry: capabilityRegistry, deleteWorkspace: deleteDeterministicWorkspace },
+    );
+    const capability = capabilityRegistry.addCapability(submittedCapability);
     const result = await learnDeterministicCapability(capability, sourceParameters, {
       registry: capabilityRegistry,
       runStore,

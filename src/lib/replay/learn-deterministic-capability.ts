@@ -56,6 +56,20 @@ function deterministicDefinition(capability: SemanticCapability) {
   throw new Error(`Capability family ${capability.family} has no deterministic template.`);
 }
 
+export async function resetStaleDeterministicLearning(
+  capability: SemanticCapability | undefined,
+  dependencies: Pick<DeterministicLearningDependencies, "registry" | "deleteWorkspace">,
+): Promise<void> {
+  if (
+    !capability?.execution ||
+    capability.executionState !== "learning" ||
+    capability.execution.deterministicReady
+  ) return;
+
+  await dependencies.deleteWorkspace(capability.execution.workspaceId);
+  dependencies.registry.markDeterministicLearningFailed(capability.id);
+}
+
 export async function learnDeterministicCapability(
   capability: SemanticCapability,
   sourceParameters: DeterministicParameters,
@@ -116,7 +130,9 @@ export async function learnDeterministicCapability(
 
     const validated = validateCapabilityResult(capability, sourceParameters, outcome.structuredResult);
     const valid =
-      outcome.isTaskSuccessful === true &&
+      outcome.status === "stopped" &&
+      outcome.isTaskSuccessful !== false &&
+      outcome.error === null &&
       outcome.validationError === null &&
       validated.validationError === null &&
       validated.structuredResult !== null;

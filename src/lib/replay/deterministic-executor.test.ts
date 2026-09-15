@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { comparativeProductResearchTaskTemplate } from "../browser-use/capability-templates";
+import { comparativeProductResearchTaskTemplate, githubRepositoryResearchTaskTemplate } from "../browser-use/capability-templates";
 import { createInMemoryCapabilityRegistry } from "../capabilities/registry";
 import type { SemanticCapability } from "../domain/capability";
 import {
@@ -182,5 +182,72 @@ describe("deterministic capability execution", () => {
     );
     expect(result.matched).toBe(false);
     expect(runBrowserUseV3).not.toHaveBeenCalled();
+  });
+
+  it("executes exact-repeat and transferred GitHub parameters as separate real runs", async () => {
+    registry.clearForTests();
+    registry.addCapability({
+      ...capability,
+      id: "github-capability",
+      name: "github_repository_research",
+      family: "github_repository_research",
+      intentSignature: "github_repository_research(query, min_stars, result_count)",
+      parameters: [
+        { name: "query", type: "string", required: true, description: "Query." },
+        { name: "min_stars", type: "number", required: true, description: "Minimum stars." },
+        { name: "result_count", type: "number", required: true, description: "Result count." },
+      ],
+      execution: {
+        ...capability.execution!,
+        taskTemplate: githubRepositoryResearchTaskTemplate,
+        surface: { kind: "website", origin: "https://github.com" },
+      },
+    });
+    const githubResult = {
+      repositories: Array.from({ length: 3 }, (_, index) => ({
+        name: `repo-${index}`,
+        owner: "owner",
+        stars: 3000 + index,
+        url: `https://github.com/owner/repo-${index}`,
+        description: "Repository.",
+      })),
+    };
+    const runBrowserUseV3 = vi.fn()
+      .mockResolvedValueOnce({
+        ...successfulOutcome,
+        sessionId: "repeat-session",
+        elapsedMs: 2_000,
+        structuredResult: githubResult,
+        rawResult: githubResult,
+      })
+      .mockResolvedValueOnce({
+        ...successfulOutcome,
+        sessionId: "transfer-session",
+        elapsedMs: 3_000,
+        structuredResult: githubResult,
+        rawResult: githubResult,
+      });
+    const repeatedPrompt = "Find 3 GitHub repositories for browser automation with over 1,000 stars.";
+    const transferredPrompt = "Find 3 GitHub repositories for workflow orchestration with over 1,500 stars.";
+
+    const repeated = await executeRoutedDeterministicCapability(
+      { task: repeatedPrompt, requestingAgentId: "Agent 02" },
+      { registry, runBrowserUseV3 },
+    );
+    const transferred = await executeRoutedDeterministicCapability(
+      { task: transferredPrompt, requestingAgentId: "Agent 03" },
+      { registry, runBrowserUseV3 },
+    );
+
+    expect(runBrowserUseV3).toHaveBeenCalledTimes(2);
+    expect(runBrowserUseV3.mock.calls[0][1]).toContain("@{{browser automation}}");
+    expect(runBrowserUseV3.mock.calls[0][1]).toContain("@{{1000}}");
+    expect(runBrowserUseV3.mock.calls[1][1]).toContain("@{{workflow orchestration}}");
+    expect(runBrowserUseV3.mock.calls[1][1]).toContain("@{{1500}}");
+    expect(repeated).not.toBe(transferred);
+    expect(repeated).toMatchObject({ sessionId: "repeat-session", elapsedMs: 2_000 });
+    expect(transferred).toMatchObject({ sessionId: "transfer-session", elapsedMs: 3_000 });
+    expect(repeated.deterministicSuccess).toBe(true);
+    expect(transferred.deterministicSuccess).toBe(true);
   });
 });
