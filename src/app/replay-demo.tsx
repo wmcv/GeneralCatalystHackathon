@@ -12,11 +12,6 @@ type DemoState = "initial" | "learning" | "learned" | "agent02" | "lookup" | "fo
 const AGENT_01_TASK = "Find 3 GitHub repositories for browser automation with over 1,000 stars.";
 const AGENT_02_TASK = "Find 3 GitHub repositories for workflow orchestration with over 1,000 stars.";
 const LEARNING_ACTIVITY = ["Searching GitHub…", "Inspecting repositories…", "Filtering by stars…", "Extracting repository metadata…"];
-const DISCOVERY_REPOSITORIES: GitHubRepositoryResearchResult["repositories"] = [
-  { owner: "vercel-labs", name: "agent-browser", stars: 42_613, url: "https://github.com/vercel-labs/agent-browser", description: "Browser automation for AI agents." },
-  { owner: "lightpanda-io", name: "browser", stars: 35_360, url: "https://github.com/lightpanda-io/browser", description: "A headless browser designed for automation." },
-  { owner: "SeleniumHQ", name: "selenium", stars: 34_492, url: "https://github.com/SeleniumHQ/selenium", description: "Browser automation framework and ecosystem." },
-];
 
 function githubCapability(): SemanticCapability {
   return {
@@ -61,6 +56,11 @@ export default function ReplayDemo() {
   const [replay, setReplay] = useState<DeterministicExecutionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [agent1Prompt, setAgent1Prompt] = useState(AGENT_01_TASK);
+  const [agent2Prompt, setAgent2Prompt] = useState(AGENT_02_TASK);
+  const [submittedAgent1Prompt, setSubmittedAgent1Prompt] = useState(AGENT_01_TASK);
+  const [submittedAgent2Prompt, setSubmittedAgent2Prompt] = useState(AGENT_02_TASK);
+  const [agent1Results, setAgent1Results] = useState<GitHubRepositoryResearchResult["repositories"]>([]);
   const pendingRequest = useRef(false);
 
   useEffect(() => {
@@ -77,6 +77,8 @@ export default function ReplayDemo() {
   async function learnTask() {
     if (pendingRequest.current) return;
     pendingRequest.current = true;
+    const submittedPrompt = agent1Prompt;
+    setSubmittedAgent1Prompt(submittedPrompt);
     setState("learning");
     setElapsed(0);
     setActivityIndex(0);
@@ -84,9 +86,18 @@ export default function ReplayDemo() {
     try {
       const existingResponse = await fetch("/api/capabilities/learn");
       if (existingResponse.ok) {
-        const existing = await existingResponse.json() as { capabilities: SemanticCapability[] };
+        const existing = await existingResponse.json() as { capabilities: SemanticCapability[]; runs?: Array<{ capabilityId?: string; executionPhase?: string; result?: unknown }> };
         const learned = existing.capabilities.find((item) => item.family === "github_repository_research" && item.executionState === "deterministic_ready");
-        if (learned) {
+        const routeResponse = learned ? await fetch("/api/capabilities/route", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task: submittedPrompt, requestingAgentId: "Agent 01" }),
+        }) : null;
+        const route = routeResponse?.ok ? await routeResponse.json() as CapabilityRouteDecision : null;
+        const sourceMatches = learned && route?.matched && JSON.stringify(learned.sourceExample) === JSON.stringify(route.parameters);
+        if (learned && sourceMatches) {
+          const learningRun = existing.runs?.find((run) => run.capabilityId === learned.id && run.executionPhase === "learning");
+          setAgent1Results(repositoriesFrom(learningRun?.result));
           setCapability(learned);
           setState("learned");
           return;
@@ -95,11 +106,12 @@ export default function ReplayDemo() {
       const response = await fetch("/api/capabilities/learn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ capability: githubCapability(), sourceParameters: { query: "browser automation", min_stars: 1000, result_count: 3 } }),
+        body: JSON.stringify({ capability: githubCapability(), task: submittedPrompt }),
       });
       const body = await response.json() as DeterministicLearningResult;
       if (!response.ok || !body.deterministicReady) throw new Error(body.error ?? "The workflow could not be learned.");
       setLearning(body);
+      setAgent1Results(repositoriesFrom(body.outcome?.structuredResult));
       setCapability(body.capability);
       setState("learned");
     } catch (caught) {
@@ -113,10 +125,12 @@ export default function ReplayDemo() {
   async function checkMemory() {
     if (pendingRequest.current) return;
     pendingRequest.current = true;
+    const submittedPrompt = agent2Prompt;
+    setSubmittedAgent2Prompt(submittedPrompt);
     setState("lookup");
     try {
       const [response] = await Promise.all([
-        fetch("/api/capabilities/route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task: AGENT_02_TASK, requestingAgentId: "Agent 02" }) }),
+        fetch("/api/capabilities/route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task: submittedPrompt, requestingAgentId: "Agent 02" }) }),
         new Promise((resolve) => window.setTimeout(resolve, 700)),
       ]);
       const decision = await response.json() as CapabilityRouteDecision;
@@ -137,7 +151,7 @@ export default function ReplayDemo() {
     setState("replaying");
     setElapsed(0);
     try {
-      const response = await fetch("/api/replay/deterministic", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task: AGENT_02_TASK, requestingAgentId: "Agent 02" }) });
+      const response = await fetch("/api/replay/deterministic", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task: submittedAgent2Prompt, requestingAgentId: "Agent 02" }) });
       const body = await response.json() as DeterministicExecutionResult;
       if (!response.ok || !body.deterministicSuccess) throw new Error(body.validationError ?? body.error ?? "Deterministic execution failed.");
       setReplay(body);
@@ -152,7 +166,7 @@ export default function ReplayDemo() {
 
   function reset() {
     if (pendingRequest.current) return;
-    setState("initial"); setLearning(null); setReplay(null); setRouteDecision(null); setError(null); setMemoryOpen(false);
+    setState("initial"); setLearning(null); setReplay(null); setRouteDecision(null); setError(null); setMemoryOpen(false); setAgent1Prompt(AGENT_01_TASK); setAgent2Prompt(AGENT_02_TASK); setSubmittedAgent1Prompt(AGENT_01_TASK); setSubmittedAgent2Prompt(AGENT_02_TASK); setAgent1Results([]);
   }
 
   const memoryVisible = !["initial", "learning", "error"].includes(state) && capability;
@@ -163,14 +177,14 @@ export default function ReplayDemo() {
         {memoryVisible && <div className="memory-wrap"><button className="memory-button" onClick={() => setMemoryOpen((open) => !open)} type="button"><span>Memory</span><strong>1 capability</strong></button>{memoryOpen && <MemoryPopover capability={capability} />}</div>}
       </header>
       <section className="stage" aria-live="polite">
-        {state === "initial" && <InitialAct onLearn={learnTask} />}
+        {state === "initial" && <InitialAct prompt={agent1Prompt} onPromptChange={setAgent1Prompt} onLearn={learnTask} />}
         {state === "learning" && <LearningAct activity={LEARNING_ACTIVITY[activityIndex]} elapsed={elapsed} />}
-        {state === "learned" && capability && <LearnedAct capability={capability} onContinue={() => setState("agent02")} />}
-        {state === "agent02" && <AgentTwoAct onCheck={checkMemory} />}
+        {state === "learned" && capability && <LearnedAct capability={capability} repositories={agent1Results} onContinue={() => setState("agent02")} />}
+        {state === "agent02" && <AgentTwoAct prompt={agent2Prompt} onPromptChange={setAgent2Prompt} onCheck={checkMemory} />}
         {state === "lookup" && <LookupAct />}
         {state === "found" && capability && routeDecision && <FoundAct capability={capability} onRun={runInstantly} />}
         {state === "replaying" && <ReplayAct elapsed={elapsed} />}
-        {state === "complete" && replay && <CompleteAct learning={learning} replay={replay} />}
+        {state === "complete" && replay && <CompleteAct agent1Prompt={submittedAgent1Prompt} agent2Prompt={submittedAgent2Prompt} agent1Results={agent1Results} learning={learning} replay={replay} />}
         {state === "error" && <ErrorAct error={error} onReset={reset} />}
       </section>
       <footer className="demo-footer"><span className="footer-context">Research Agent <i /> Organization: Demo Workspace</span><button disabled={state === "learning" || state === "lookup" || state === "replaying"} onClick={reset} type="button">Reset demo</button></footer>
@@ -178,20 +192,20 @@ export default function ReplayDemo() {
   );
 }
 
-function InitialAct({ onLearn }: { onLearn(): void }) {
-  return <div className="act initial-act"><p className="eyebrow">REPLAY</p><h1>One agent learns.<br /><span>Every agent remembers.</span></h1><TaskPrompt agent="Agent 01" task={AGENT_01_TASK} /><PrimaryButton onClick={onLearn}>Learn this task</PrimaryButton></div>;
+function InitialAct({ prompt, onPromptChange, onLearn }: { prompt: string; onPromptChange(value: string): void; onLearn(): void }) {
+  return <div className="act initial-act"><p className="eyebrow">REPLAY</p><h1>One agent learns.<br /><span>Every agent remembers.</span></h1><EditableTaskPrompt agent="Agent 01" value={prompt} onChange={onPromptChange} /><PrimaryButton onClick={onLearn}>Learn this task</PrimaryButton></div>;
 }
 
 function LearningAct({ activity, elapsed }: { activity: string; elapsed: number }) {
   return <div className="act learning-act"><p className="act-number">01 — LEARN</p><h2>Agent 01 is learning<br />this workflow.</h2><p className="activity" key={activity}>{activity}</p><p className="quiet-metric">{formatSeconds(elapsed)} <span /> Building reusable procedure</p></div>;
 }
 
-function LearnedAct({ capability, onContinue }: { capability: SemanticCapability; onContinue(): void }) {
-  return <div className="act learned-act"><p className="act-number">02 — REMEMBER</p><h2 className="single-word">Learned.</h2><p className="capability-name">{capability.name}</p><div className="parameter-line"><span>query</span><span>min_stars</span><span>result_count</span></div><p className="published">Published to organization memory</p><p className="secondary">Learned by Agent 01 <span /> Available to every agent</p><div className="procedure"><span>Search</span><i>→</i><span>Filter</span><i>→</i><span>Extract</span><i>→</i><span>Return</span></div><TextButton onClick={onContinue}>Meet Agent 02</TextButton></div>;
+function LearnedAct({ capability, repositories, onContinue }: { capability: SemanticCapability; repositories: GitHubRepositoryResearchResult["repositories"]; onContinue(): void }) {
+  return <div className="act learned-act"><p className="act-number">02 — REMEMBER</p><h2 className="single-word">Learned.</h2><p className="capability-name">{capability.name}</p><div className="parameter-line"><span>query</span><span>min_stars</span><span>result_count</span></div><p className="published">Published to organization memory</p><p className="secondary">Learned by Agent 01 <span /> Available to every agent</p><div className="procedure"><span>Search</span><i>→</i><span>Filter</span><i>→</i><span>Extract</span><i>→</i><span>Return</span></div><RepositoryList title={`What Agent 01 found · ${repositories.length} results`} repositories={repositories} compact /><TextButton onClick={onContinue}>Meet Agent 02</TextButton></div>;
 }
 
-function AgentTwoAct({ onCheck }: { onCheck(): void }) {
-  return <div className="act agent-act"><p className="act-number">03 — REUSE</p><TaskPrompt agent="Agent 02" task={AGENT_02_TASK} /><PrimaryButton onClick={onCheck}>Check shared memory</PrimaryButton></div>;
+function AgentTwoAct({ prompt, onPromptChange, onCheck }: { prompt: string; onPromptChange(value: string): void; onCheck(): void }) {
+  return <div className="act agent-act"><p className="act-number">03 — REUSE</p><EditableTaskPrompt agent="Agent 02" value={prompt} onChange={onPromptChange} /><PrimaryButton onClick={onCheck}>Check shared memory</PrimaryButton></div>;
 }
 
 function LookupAct() { return <div className="act lookup-act"><p className="act-number">03 — REUSE</p><h2>Searching<br />organization memory…</h2></div>; }
@@ -204,24 +218,32 @@ function ReplayAct({ elapsed }: { elapsed: number }) {
   return <div className="act replay-act"><p className="act-number">04 — EXECUTE</p><h2>Deterministic<br />execution</h2><p className="activity">Running the learned procedure…</p><p className="secondary strong">No model reasoning required</p><p className="quiet-metric">{formatSeconds(elapsed)}</p></div>;
 }
 
-function CompleteAct({ learning, replay }: { learning: DeterministicLearningResult | null; replay: DeterministicExecutionResult }) {
+function CompleteAct({ agent1Prompt, agent2Prompt, agent1Results, learning, replay }: { agent1Prompt: string; agent2Prompt: string; agent1Results: GitHubRepositoryResearchResult["repositories"]; learning: DeterministicLearningResult | null; replay: DeterministicExecutionResult }) {
   const learned = learning?.outcome ?? null;
   const learningMs = learned?.elapsedMs ?? 50_664;
   const learningCost = Number(learned?.totalCostUsd ?? 0.013918);
   const replayCost = Number(replay.totalCostUsd ?? 0.0003333333);
   const speedup = safeRatio(learningMs, replay.elapsedMs, 12);
   const cheaper = safeRatio(learningCost, replayCost, 42);
-  const discoveryRepositories = repositoriesFrom(learned?.structuredResult);
-  return <div className="act complete-act"><p className="act-number">REPLAY REMEMBERED</p><div className="hero-metrics"><p><strong>{Math.round(speedup)}×</strong><span>faster</span></p><p><strong>{Math.round(cheaper)}×</strong><span>cheaper</span></p><p><strong>0</strong><span>LLM tokens</span></p></div><Comparison learning={learned} replay={replay} /><div className="result-columns"><RepositoryList title="Agent 01 · browser automation" repositories={discoveryRepositories.length > 0 ? discoveryRepositories : DISCOVERY_REPOSITORIES} /><RepositoryList title="Agent 02 · workflow orchestration" repositories={repositoriesFrom(replay.structuredResult)} /></div></div>;
+  return <div className="act complete-act"><p className="act-number">REPLAY REMEMBERED</p><div className="hero-metrics"><p><strong>{Math.round(speedup)}×</strong><span>faster</span></p><p><strong>{Math.round(cheaper)}×</strong><span>cheaper</span></p><p><strong>0</strong><span>LLM tokens</span></p></div><Comparison learning={learned} replay={replay} /><div className="result-columns"><ResultColumn agent="Agent 01" prompt={agent1Prompt} repositories={agent1Results} /><ResultColumn agent="Agent 02" prompt={agent2Prompt} repositories={repositoriesFrom(replay.structuredResult)} /></div></div>;
 }
 
-function TaskPrompt({ agent, task }: { agent: string; task: string }) {
-  const lines = task.replace(" with over", "\nwith over").split("\n");
-  return <div className="task-prompt"><p>{agent}</p><h2>{lines.map((line) => <span key={line}>{line}</span>)}</h2></div>;
+function EditableTaskPrompt({ agent, value, onChange }: { agent: string; value: string; onChange(value: string): void }) {
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!textarea.current) return;
+    textarea.current.style.height = "0px";
+    textarea.current.style.height = `${textarea.current.scrollHeight}px`;
+  }, [value]);
+  return <label className="task-prompt"><span>{agent}</span><textarea ref={textarea} aria-label={`${agent} task`} rows={2} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
-function RepositoryList({ title, repositories }: { title: string; repositories: GitHubRepositoryResearchResult["repositories"] }) {
-  return <section className="repo-list"><h3>{title}</h3>{repositories.map((repo) => <a href={repo.url} key={repo.url} rel="noreferrer" target="_blank"><span><strong>{repo.owner}/{repo.name}</strong><small>{repo.description}</small></span><em>{formatStars(repo.stars)} ★</em></a>)}</section>;
+function ResultColumn({ agent, prompt, repositories }: { agent: string; prompt: string; repositories: GitHubRepositoryResearchResult["repositories"] }) {
+  return <section><p className="result-agent">{agent}</p><blockquote>{prompt}</blockquote><RepositoryList title="Results" repositories={repositories} /></section>;
+}
+
+function RepositoryList({ title, repositories, compact = false }: { title: string; repositories: GitHubRepositoryResearchResult["repositories"]; compact?: boolean }) {
+  return <section className={`repo-list${compact ? " compact" : ""}`}><h3>{title}</h3>{repositories.map((repo) => <a href={repo.url} key={repo.url} rel="noreferrer" target="_blank"><span><strong>{repo.owner}/{repo.name}</strong><small>{repo.description}</small></span><em>{formatStars(repo.stars)} ★</em></a>)}</section>;
 }
 
 function Comparison({ learning, replay }: { learning: DeterministicLearningResult["outcome"]; replay: DeterministicExecutionResult }) {

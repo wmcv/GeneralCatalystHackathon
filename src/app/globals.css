@@ -17,10 +17,11 @@ button { color:inherit; }
 .initial-act h1 { margin:0; font-size:clamp(42px,6vw,82px); line-height:.98; letter-spacing:-.055em; font-weight:620; }
 .initial-act h1 span { color:#777774; }
 
-.task-prompt { width:min(100%,760px); margin:clamp(48px,7vh,78px) auto 30px; padding:26px 30px 28px; text-align:left; border-block:1px solid #343432; }
-.task-prompt p { margin:0 0 13px; color:var(--accent); font-size:11px; font-weight:650; letter-spacing:.16em; text-transform:uppercase; }
-.task-prompt h2 { margin:0; font-size:clamp(19px,2.2vw,28px); line-height:1.35; letter-spacing:-.025em; font-weight:430; }
-.task-prompt h2 span { display:block; }
+.task-prompt { display:block; width:min(100%,760px); margin:clamp(48px,7vh,78px) auto 30px; padding:26px 30px 28px; text-align:left; border-block:1px solid #343432; }
+.task-prompt > span { display:block; margin:0 0 13px; color:var(--accent); font-size:11px; font-weight:650; letter-spacing:.16em; text-transform:uppercase; }
+.task-prompt textarea { display:block; width:100%; min-height:2.7em; resize:none; overflow:hidden; border:0; border-radius:0; outline:0; background:transparent; color:var(--fg); font-size:clamp(19px,2.2vw,28px); line-height:1.35; letter-spacing:-.025em; font-weight:430; caret-color:var(--accent); transition:color 180ms ease,box-shadow 180ms ease; }
+.task-prompt textarea::selection { background:rgb(142 230 181 / 22%); }
+.task-prompt:focus-within { border-color:#666661; }
 .primary-button { display:inline-flex; align-items:center; gap:28px; border:0; border-radius:999px; padding:14px 18px 14px 22px; background:var(--fg); color:#090909; font-size:14px; font-weight:620; cursor:pointer; transition:transform 180ms ease,background 180ms ease; }
 .primary-button span { display:grid; place-items:center; width:25px; height:25px; border-radius:50%; background:#d7d7d3; }
 .primary-button:hover { transform:translateY(-2px); background:#fff; }
@@ -31,7 +32,7 @@ button { color:inherit; }
 .activity { margin:52px 0 0; color:var(--accent); font-size:clamp(17px,2vw,22px); animation:fade-in 300ms ease both; }
 @keyframes fade-in { from { opacity:0; } }
 .quiet-metric { display:flex; align-items:center; justify-content:center; gap:12px; margin:24px 0 0; color:#6f6f6c; font:12px/1.4 "SFMono-Regular",Consolas,monospace; }
-.quiet-metric span, .secondary span, .demo-footer span { width:3px; height:3px; border-radius:50%; background:#50504e; }
+.quiet-metric span, .secondary span { width:3px; height:3px; border-radius:50%; background:#50504e; }
 .single-word { margin:0; font-size:clamp(70px,11vw,148px); line-height:.9; letter-spacing:-.07em; font-weight:620; }
 .capability-name { margin:38px 0 0; overflow-wrap:anywhere; font:clamp(16px,2vw,22px)/1.4 "SFMono-Regular",Consolas,monospace; letter-spacing:-.02em; }
 .parameter-line { display:flex; justify-content:center; gap:25px; margin:14px 0 0; color:var(--muted); font:12px/1.4 "SFMono-Regular",Consolas,monospace; }
@@ -40,6 +41,8 @@ button { color:inherit; }
 .secondary.strong { color:var(--fg); }
 .procedure { display:flex; align-items:center; justify-content:center; gap:clamp(12px,2vw,26px); margin:48px auto 0; color:#c5c5c1; font-size:14px; }
 .procedure i { color:#50504d; font-style:normal; }
+.learned-act .repo-list.compact { width:min(100%,680px); margin:38px auto 0; text-align:left; }
+.learned-act .repo-list.compact a { padding:10px 0; }
 .text-button { margin-top:40px; padding:8px; border:0; background:transparent; color:var(--muted); font-size:13px; cursor:pointer; }
 .text-button:hover { color:var(--fg); }
 .agent-act .task-prompt { margin-top:0; }
@@ -56,6 +59,8 @@ button { color:inherit; }
 .comparison-row strong { color:#666663; font-weight:400; text-align:left; }
 .comparison-head { color:#5e5e5b; text-transform:uppercase; letter-spacing:.08em; }
 .result-columns { display:grid; grid-template-columns:1fr 1fr; gap:clamp(32px,7vw,90px); margin-top:50px; text-align:left; }
+.result-agent { margin:0 0 10px; color:var(--accent); font-size:11px; font-weight:650; letter-spacing:.16em; text-transform:uppercase; }
+.result-columns blockquote { min-height:3.2em; margin:0 0 24px; color:#b8b8b4; font-size:14px; line-height:1.55; letter-spacing:-.01em; }
 .repo-list h3 { margin:0 0 10px; color:#686865; font-size:11px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; }
 .repo-list a { display:flex; justify-content:space-between; gap:20px; padding:13px 0; border-top:1px solid var(--line); color:inherit; text-decoration:none; transition:color 160ms ease; }
 .repo-list a:hover { color:var(--accent); }
@@ -78,7 +83,7 @@ button { color:inherit; }
 .demo-footer button { position:absolute; right:0; border:0; background:none; color:#62625f; font-size:10px; cursor:pointer; transition:color 160ms ease; }
 .demo-footer button:hover { color:var(--fg); }
 
-@media (max-height:780px) { .demo-shell { grid-template-rows:58px 1fr 46px; } .task-prompt { margin-top:32px; } .complete-act { padding:28px 0; } .complete-act .comparison { margin-top:32px; } .complete-act .result-columns { margin-top:28px; } }
+@media (max-height:780px) { .demo-shell { grid-template-rows:58px 1fr 46px; } .task-prompt { margin-top:32px; } .learned-act { padding:28px 0; } .learned-act .procedure { margin-top:28px; } .learned-act .repo-list.compact { margin-top:26px; } .complete-act { padding:28px 0; } .complete-act .comparison { margin-top:32px; } .complete-act .result-columns { margin-top:28px; } }
 @media (max-width:720px) { .demo-shell { padding:0 20px; overflow:auto; } .stage { padding:30px 0; } .initial-act h1 { font-size:44px; } .task-prompt { padding:20px 4px; } .parameter-line { flex-wrap:wrap; } .hero-metrics { grid-template-columns:1fr; gap:34px; } .hero-metrics strong { font-size:72px; } .result-columns { grid-template-columns:1fr; } .complete-act { padding:40px 0; } .procedure { gap:8px; font-size:12px; } .repo-list small { max-width:230px; } }
 @media (max-width:520px) { .footer-context { display:none; } .demo-footer button { position:static; } .memory-button span { display:none; } .repo-list a { gap:10px; } }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms !important; transition-duration:.01ms !important; } }

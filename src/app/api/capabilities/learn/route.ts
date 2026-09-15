@@ -8,6 +8,7 @@ import {
 } from "@/lib/browser-use/deterministic-runner";
 import { capabilityRegistry } from "@/lib/capabilities/registry";
 import { semanticCapabilitySchema } from "@/lib/domain/capability";
+import { extractGitHubRepositoryResearchParameters } from "@/lib/capabilities/router";
 import {
   confirmDeterministicLearning,
   learnDeterministicCapability,
@@ -21,7 +22,10 @@ export const maxDuration = 900;
 const parameterSchema = z.union([z.string(), z.number(), z.boolean()]);
 const requestSchema = z.object({
   capability: semanticCapabilitySchema,
-  sourceParameters: z.record(z.string(), parameterSchema),
+  task: z.string().trim().min(1).optional(),
+  sourceParameters: z.record(z.string(), parameterSchema).optional(),
+}).refine((input) => input.task || input.sourceParameters, {
+  message: "A task or sourceParameters is required.",
 });
 
 const confirmRequestSchema = z.object({
@@ -62,8 +66,20 @@ export async function POST(request: Request) {
   }
   try {
     const input = requestSchema.parse(await request.json());
-    const capability = capabilityRegistry.addCapability(input.capability);
-    const result = await learnDeterministicCapability(capability, input.sourceParameters, {
+    const sourceParameters = input.task
+      ? extractGitHubRepositoryResearchParameters(input.task)
+      : input.sourceParameters;
+    if (!sourceParameters) {
+      return NextResponse.json(
+        { error: "The task is not a supported repository research request." },
+        { status: 422 },
+      );
+    }
+    const capability = capabilityRegistry.addCapability(semanticCapabilitySchema.parse({
+      ...input.capability,
+      sourceExample: sourceParameters,
+    }));
+    const result = await learnDeterministicCapability(capability, sourceParameters, {
       registry: capabilityRegistry,
       runStore,
       createWorkspace: createDeterministicWorkspace,

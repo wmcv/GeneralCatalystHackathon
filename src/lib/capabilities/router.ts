@@ -44,15 +44,34 @@ function parseCount(value: string | undefined): number {
   return NUMBER_WORDS[value.toLowerCase()] ?? Number(value);
 }
 
+export interface GitHubRepositoryResearchParameters extends Record<string, string | number | boolean> {
+  query: string;
+  min_stars: number;
+  result_count: number;
+}
+
+export function extractGitHubRepositoryResearchParameters(
+  task: string,
+): GitHubRepositoryResearchParameters | null {
+  const normalizedTask = task.trim().replace(/[.?!]+$/, "");
+  const intent = normalizedTask.match(
+    /^(find|recommend|suggest)\s+(?:(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+)?github\s+(?:repositories|repos)\s+(?:for|about|related\s+to)\s+(.+?)\s+(?:with\s+)?(?:over|at\s+least|above)\s+([\d,]+)\s+stars?$/i,
+  );
+  if (!intent) return null;
+  return {
+    query: intent[3].trim(),
+    min_stars: Number(intent[4].replaceAll(",", "")),
+    result_count: parseCount(intent[2]),
+  };
+}
+
 export function routeCapability(
   task: string,
   registry: CapabilityRegistry = capabilityRegistry,
 ): CapabilityRouteDecision {
   const normalizedTask = task.trim().replace(/[.?!]+$/, "");
-  const githubIntent = normalizedTask.match(
-    /^(find|recommend|suggest)\s+(?:(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+)?github\s+(?:repositories|repos)\s+(?:for|about|related\s+to)\s+(.+?)\s+(?:with\s+)?(?:over|at\s+least|above)\s+([\d,]+)\s+stars?$/i,
-  );
-  if (githubIntent) {
+  const githubParameters = extractGitHubRepositoryResearchParameters(task);
+  if (githubParameters) {
     const githubCapability = registry
       .findByFamily("github_repository_research")
       .sort((left, right) => right.version - left.version)[0];
@@ -64,12 +83,8 @@ export function routeCapability(
       capabilityId: githubCapability.id,
       capabilityName: githubCapability.name,
       family: githubCapability.family,
-      confidence: githubIntent[2] ? 0.99 : 0.95,
-      parameters: {
-        query: githubIntent[3].trim(),
-        min_stars: Number(githubIntent[4].replaceAll(",", "")),
-        result_count: parseCount(githubIntent[2]),
-      },
+      confidence: /^(?:find|recommend|suggest)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+/i.test(normalizedTask) ? 0.99 : 0.95,
+      parameters: githubParameters,
       reason: "The task matches GitHub repository research learned by the organization.",
     });
   }

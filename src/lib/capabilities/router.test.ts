@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { SemanticCapability } from "../domain/capability";
 import { createInMemoryCapabilityRegistry } from "./registry";
-import { routeCapability } from "./router";
+import { extractGitHubRepositoryResearchParameters, routeCapability } from "./router";
 
 const learnedCapability: SemanticCapability = {
   id: "comparative-product-research:run-1",
@@ -122,6 +122,12 @@ describe("capability router", () => {
       capabilityId: githubCapability.id,
       parameters: { query: "workflow orchestration", min_stars: 1000, result_count: 3 },
     });
+  });
+
+  it("extracts learning parameters without requiring a learned capability", () => {
+    expect(extractGitHubRepositoryResearchParameters(
+      "Find 4 GitHub repositories for agent tooling with over 2,000 stars.",
+    )).toEqual({ query: "agent tooling", min_stars: 2000, result_count: 4 });
   });
 
   it("does not route GitHub research unless the family was learned", () => {
