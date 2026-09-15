@@ -1,3 +1,5 @@
+import "server-only";
+
 import { z } from "zod";
 
 export const browserUseConfig = {
@@ -6,20 +8,14 @@ export const browserUseConfig = {
   proxyCountryCode: null,
 } as const;
 
-const serverEnvSchema = z.object({
+const browserUseEnvSchema = z.object({
   BROWSER_USE_API_KEY: z.string().min(1),
-  OPENROUTER_API_KEY: z.string().min(1),
 });
 
-export type ServerEnv = z.infer<typeof serverEnvSchema>;
+export type BrowserUseEnv = z.infer<typeof browserUseEnvSchema>;
 
-export function getServerEnv(): ServerEnv {
-  if (typeof window !== "undefined") {
-    throw new Error("Server environment variables cannot be read in the browser.");
-  }
-
-  return serverEnvSchema.parse({
+export function getBrowserUseEnv(): BrowserUseEnv {
+  return browserUseEnvSchema.parse({
     BROWSER_USE_API_KEY: process.env.BROWSER_USE_API_KEY,
-    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
   });
 }
