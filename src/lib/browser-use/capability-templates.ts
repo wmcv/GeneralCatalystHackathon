@@ -20,3 +20,26 @@ Return JSON only with this shape:
   ],
   "limitations": ["string"]
 }`;
+
+export const githubRepositoryResearchTaskTemplate = `On GitHub, find @{{result_count}} public repositories related to @{{query}} with at least @{{min_stars}} stars.
+
+For each repository, return:
+- name
+- owner
+- stars as an integer
+- GitHub URL
+- short description
+
+Do not log in.
+Return JSON only in this shape:
+{
+  "repositories": [
+    {
+      "name": "string",
+      "owner": "string",
+      "stars": 1000,
+      "url": "https://github.com/owner/repository",
+      "description": "string"
+    }
+  ]
+}`;

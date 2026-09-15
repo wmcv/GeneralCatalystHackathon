@@ -1,5 +1,9 @@
-import { comparativeProductResearchTaskTemplate } from "../browser-use/capability-templates";
+import {
+  comparativeProductResearchTaskTemplate,
+  githubRepositoryResearchTaskTemplate,
+} from "../browser-use/capability-templates";
 import type { CapabilityRegistry } from "../capabilities/registry";
+import { validateCapabilityResult } from "../capabilities/result-validation";
 import type { SemanticCapability } from "../domain/capability";
 import type { RunStore } from "../state/run-store";
 import {
@@ -39,6 +43,19 @@ function numberOrUndefined(value: string | null): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function deterministicDefinition(capability: SemanticCapability) {
+  if (capability.family === "github_repository_research") {
+    return {
+      taskTemplate: githubRepositoryResearchTaskTemplate,
+      surface: { kind: "website" as const, origin: "https://github.com" },
+    };
+  }
+  if (capability.family === "comparative_product_research") {
+    return { taskTemplate: comparativeProductResearchTaskTemplate };
+  }
+  throw new Error(`Capability family ${capability.family} has no deterministic template.`);
+}
+
 export async function learnDeterministicCapability(
   capability: SemanticCapability,
   sourceParameters: DeterministicParameters,
@@ -47,9 +64,7 @@ export async function learnDeterministicCapability(
   if (capability.executionState !== "semantic" || capability.execution) {
     throw new Error(`Capability ${capability.id} is not awaiting deterministic learning.`);
   }
-  if (capability.family !== "comparative_product_research") {
-    throw new Error(`Capability family ${capability.family} has no deterministic template.`);
-  }
+  const definition = deterministicDefinition(capability);
 
   let workspaceId: string | null = null;
   let executionTask: string | null = null;
@@ -64,12 +79,13 @@ export async function learnDeterministicCapability(
       provider: "browser-use-v3",
       mode: "cached-script",
       workspaceId,
-      taskTemplate: comparativeProductResearchTaskTemplate,
+      taskTemplate: definition.taskTemplate,
       cacheScript: true,
       autoHeal: false,
+      ...("surface" in definition ? { surface: definition.surface } : {}),
     });
     executionTask = renderParameterizedTaskTemplate(
-      comparativeProductResearchTaskTemplate,
+      definition.taskTemplate,
       sourceParameters,
     );
     outcome = await dependencies.runBrowserUseV3(learning.execution!, executionTask);
@@ -95,27 +111,25 @@ export async function learnDeterministicCapability(
         ...(numberOrUndefined(outcome.browserCostUsd) === undefined ? {} : { browserCostUsd: numberOrUndefined(outcome.browserCostUsd) }),
         ...(numberOrUndefined(outcome.proxyCostUsd) === undefined ? {} : { proxyCostUsd: numberOrUndefined(outcome.proxyCostUsd) }),
       });
-      if (outcome.structuredResult) {
-        dependencies.runStore.saveResult(outcome.sessionId, outcome.structuredResult);
-      }
+      if (outcome.structuredResult) dependencies.runStore.saveResult(outcome.sessionId, outcome.structuredResult);
     }
 
-    const expectedCount = Number(sourceParameters.result_count);
+    const validated = validateCapabilityResult(capability, sourceParameters, outcome.structuredResult);
     const valid =
       outcome.isTaskSuccessful === true &&
       outcome.validationError === null &&
-      outcome.structuredResult?.products.length === expectedCount;
+      validated.validationError === null &&
+      validated.structuredResult !== null;
     if (!valid || !outcome.scriptGenerated) {
       const reason = !valid
-        ? outcome.validationError ?? "Learning execution did not return the requested product count."
+        ? outcome.validationError ?? validated.validationError ?? "Learning execution was invalid."
         : "Browser Use did not expose evidence that a reusable script was generated.";
-      await dependencies.deleteWorkspace(workspaceId);
-      const reset = dependencies.registry.markDeterministicLearningFailed(capability.id);
+      const reset = dependencies.registry.markDeterministicUnready(capability.id);
       return {
         capability: reset,
         executionTask,
         workspaceId,
-        workspacePreserved: false,
+        workspacePreserved: true,
         deterministicReady: false,
         outcome,
         error: outcome.error ?? reason,
@@ -134,18 +148,14 @@ export async function learnDeterministicCapability(
     };
   } catch (error) {
     if (workspaceId) {
-      try {
-        await dependencies.deleteWorkspace(workspaceId);
-      } catch {
-        // Preserve the original learning failure.
-      }
-      dependencies.registry.markDeterministicLearningFailed(capability.id);
+      const stored = dependencies.registry.getCapabilityById(capability.id);
+      if (stored?.execution) dependencies.registry.markDeterministicUnready(capability.id);
     }
     return {
       capability: dependencies.registry.getCapabilityById(capability.id) ?? capability,
       executionTask,
       workspaceId,
-      workspacePreserved: false,
+      workspacePreserved: workspaceId !== null,
       deterministicReady: false,
       outcome,
       error: errorMessage(error),

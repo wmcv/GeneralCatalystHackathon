@@ -22,6 +22,10 @@ export const browserUseCachedScriptExecutionSchema = z.object({
   cacheScript: z.literal(true),
   autoHeal: z.literal(false),
   deterministicReady: z.boolean(),
+  surface: z.object({
+    kind: z.literal("website"),
+    origin: z.url(),
+  }).optional(),
 });
 
 export const capabilityExecutionStateSchema = z.enum([

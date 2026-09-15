@@ -32,6 +32,19 @@ const semanticCapability: SemanticCapability = {
   sourceExample: {},
 };
 
+const githubCapability: SemanticCapability = {
+  ...semanticCapability,
+  id: "github-capability-1",
+  name: "github_repository_research",
+  family: "github_repository_research",
+  intentSignature: "github_repository_research(query, min_stars, result_count)",
+  parameters: [
+    { name: "query", type: "string", required: true, description: "Search topic." },
+    { name: "min_stars", type: "number", required: true, description: "Minimum stars." },
+    { name: "result_count", type: "number", required: true, description: "Count." },
+  ],
+};
+
 const outcome: DeterministicBrowserOutcome = {
   sessionId: "session-1",
   status: "stopped",
@@ -102,7 +115,7 @@ describe("deterministic capability learning", () => {
     });
   });
 
-  it("does not become ready and removes the failed workspace", async () => {
+  it("does not become ready and preserves the failed workspace for manual cleanup", async () => {
     const deleteWorkspace = vi.fn();
     const result = await learnDeterministicCapability(semanticCapability, sourceParameters, {
       registry,
@@ -112,10 +125,46 @@ describe("deterministic capability learning", () => {
       runBrowserUseV3: vi.fn().mockResolvedValue({ ...outcome, scriptGenerated: false }),
     });
 
-    expect(result).toMatchObject({ deterministicReady: false, workspacePreserved: false });
+    expect(result).toMatchObject({ deterministicReady: false, workspacePreserved: true });
     expect(registry.getCapabilityById(semanticCapability.id)).toMatchObject({
-      executionState: "semantic",
+      executionState: "learning",
+      execution: { workspaceId: "workspace-1", deterministicReady: false },
     });
-    expect(deleteWorkspace).toHaveBeenCalledWith("workspace-1");
+    expect(deleteWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("binds GitHub learning to the GitHub website surface", async () => {
+    registry.addCapability(githubCapability);
+    const githubOutcome: DeterministicBrowserOutcome = {
+      ...outcome,
+      structuredResult: {
+        repositories: Array.from({ length: 3 }, (_, index) => ({
+          name: `repo-${index}`,
+          owner: "owner",
+          stars: 2000 + index,
+          url: `https://github.com/owner/repo-${index}`,
+          description: "Repository.",
+        })),
+      },
+    };
+    const runBrowserUseV3 = vi.fn().mockResolvedValue(githubOutcome);
+    const result = await learnDeterministicCapability(
+      githubCapability,
+      { query: "browser automation", min_stars: 1000, result_count: 3 },
+      {
+        registry,
+        runStore,
+        createWorkspace: vi.fn().mockResolvedValue({ id: "github-workspace" }),
+        deleteWorkspace: vi.fn(),
+        runBrowserUseV3,
+      },
+    );
+    expect(result.capability.execution).toMatchObject({
+      surface: { kind: "website", origin: "https://github.com" },
+      deterministicReady: true,
+    });
+    expect(runBrowserUseV3.mock.calls[0][1]).toContain(
+      "find @{{3}} public repositories related to @{{browser automation}} with at least @{{1000}} stars",
+    );
   });
 });

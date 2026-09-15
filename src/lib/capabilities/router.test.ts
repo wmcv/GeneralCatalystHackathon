@@ -24,6 +24,14 @@ const learnedCapability: SemanticCapability = {
   sourceExample: {},
 };
 
+const githubCapability: SemanticCapability = {
+  ...learnedCapability,
+  id: "github-repository-research:run-2",
+  name: "github_repository_research",
+  family: "github_repository_research",
+  intentSignature: "github_repository_research(query, min_stars, result_count)",
+};
+
 describe("capability router", () => {
   const registry = createInMemoryCapabilityRegistry();
 
@@ -101,5 +109,25 @@ describe("capability router", () => {
     registry.addCapability({ ...learnedCapability, id: "other", family: "travel_planning" });
     expect(routeCapability("Find 4 ergonomic mice under $120 for programming", registry).matched)
       .toBe(false);
+  });
+
+  it("routes GitHub repository research and extracts its parameters", () => {
+    registry.addCapability(githubCapability);
+    const decision = routeCapability(
+      "Find 3 GitHub repos about workflow orchestration with at least 1,000 stars",
+      registry,
+    );
+    expect(decision).toMatchObject({
+      matched: true,
+      capabilityId: githubCapability.id,
+      parameters: { query: "workflow orchestration", min_stars: 1000, result_count: 3 },
+    });
+  });
+
+  it("does not route GitHub research unless the family was learned", () => {
+    expect(routeCapability(
+      "Recommend 5 GitHub repositories for vector databases above 5000 stars",
+      registry,
+    ).matched).toBe(false);
   });
 });

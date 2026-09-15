@@ -4,7 +4,6 @@ import { BrowserUse, type MessageResponse, type SessionResult } from "browser-us
 import type { BrowserUseCachedScriptExecution } from "../domain/capability";
 import type { DeterministicBrowserOutcome } from "../replay/deterministic-executor";
 import { browserUseConfig, getBrowserUseEnv } from "./config";
-import { browserUseSpikeResultSchema } from "./types";
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -12,11 +11,10 @@ function message(error: unknown): string {
 
 function parseResult(output: unknown) {
   try {
-    const value = typeof output === "string" ? JSON.parse(output) : output;
-    const parsed = browserUseSpikeResultSchema.safeParse(value);
-    return parsed.success
-      ? { structuredResult: parsed.data, validationError: null }
-      : { structuredResult: null, validationError: parsed.error.message };
+    return {
+      structuredResult: typeof output === "string" ? JSON.parse(output) : output,
+      validationError: null,
+    };
   } catch (error) {
     return { structuredResult: null, validationError: message(error) };
   }

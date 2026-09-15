@@ -1,5 +1,5 @@
-import { browserUseSpikeResultSchema, type BrowserUseSpikeResult } from "../browser-use/types";
 import type { CapabilityRegistry } from "../capabilities/registry";
+import { validateCapabilityResult, type CapabilityStructuredResult } from "../capabilities/result-validation";
 import { routeCapability, type CapabilityRouteDecision } from "../capabilities/router";
 import type {
   BrowserUseCachedScriptExecution,
@@ -23,7 +23,7 @@ export interface DeterministicBrowserOutcome {
   messages: Array<{ type: string; summary: string; data: string }>;
   scriptGenerated: boolean;
   rawResult: unknown;
-  structuredResult: BrowserUseSpikeResult | null;
+  structuredResult: CapabilityStructuredResult | null;
   validationError: string | null;
   error: string | null;
 }
@@ -129,20 +129,17 @@ export async function executeRoutedDeterministicCapability(
 
   const executionTask = renderCachedScriptTask(capability, routeDecision.parameters);
   const outcome = await dependencies.runBrowserUseV3(capability.execution, executionTask);
-  const structuredResult = browserUseSpikeResultSchema.safeParse(outcome.structuredResult);
-  const expectedCount = Number(routeDecision.parameters.result_count);
-  const countMatches = structuredResult.success && structuredResult.data.products.length === expectedCount;
-  const validationError = outcome.validationError ?? (
-    structuredResult.success && !countMatches
-      ? `Expected ${expectedCount} products but received ${structuredResult.data.products.length}.`
-      : null
+  const validated = validateCapabilityResult(
+    capability,
+    routeDecision.parameters,
+    outcome.structuredResult,
   );
+  const validationError = outcome.validationError ?? validated.validationError;
   const succeeded =
     outcome.status === "stopped" &&
     outcome.isTaskSuccessful !== false &&
     outcome.error === null &&
-    structuredResult.success &&
-    countMatches &&
+    validated.structuredResult !== null &&
     validationError === null;
   const deterministicallySucceeded =
     succeeded &&
@@ -176,11 +173,12 @@ export async function executeRoutedDeterministicCapability(
       ...(outcome.browserCostUsd === null ? {} : { browserCostUsd: Number(outcome.browserCostUsd) }),
       ...(outcome.proxyCostUsd === null ? {} : { proxyCostUsd: Number(outcome.proxyCostUsd) }),
     });
-    if (succeeded) dependencies.runStore.saveResult(outcome.sessionId, outcome.structuredResult);
+    if (succeeded) dependencies.runStore.saveResult(outcome.sessionId, validated.structuredResult);
   }
 
   return {
     ...outcome,
+    structuredResult: validated.structuredResult,
     validationError,
     matched: true,
     deterministicSuccess: deterministicallySucceeded,
