@@ -2,9 +2,16 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { deleteDeterministicWorkspace, createDeterministicWorkspace } from "@/lib/browser-use/workspaces";
 import { runDeterministicBrowserUseV3 } from "@/lib/browser-use/deterministic-runner";
+import {
+  containsGeneratedScript,
+  getBrowserUseV3SessionMessages,
+} from "@/lib/browser-use/deterministic-runner";
 import { capabilityRegistry } from "@/lib/capabilities/registry";
 import { semanticCapabilitySchema } from "@/lib/domain/capability";
-import { learnDeterministicCapability } from "@/lib/replay/learn-deterministic-capability";
+import {
+  confirmDeterministicLearning,
+  learnDeterministicCapability,
+} from "@/lib/replay/learn-deterministic-capability";
 import { runStore } from "@/lib/state/run-store";
 
 export const runtime = "nodejs";
@@ -16,11 +23,32 @@ const requestSchema = z.object({
   sourceParameters: z.record(z.string(), parameterSchema),
 });
 
+const confirmRequestSchema = z.object({
+  capabilityId: z.string().min(1),
+  sessionId: z.string().min(1),
+});
+
 export async function GET() {
   return NextResponse.json({
     capabilities: capabilityRegistry.listCapabilities(),
     runs: runStore.list().map((run) => ({ ...run, result: runStore.getResult(run.id) ?? null })),
   });
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const input = confirmRequestSchema.parse(await request.json());
+    const capability = await confirmDeterministicLearning(input.capabilityId, input.sessionId, {
+      registry: capabilityRegistry,
+      runStore,
+      getSessionMessages: getBrowserUseV3SessionMessages,
+      containsGeneratedScript,
+    });
+    return NextResponse.json({ capability });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: message }, { status: 422 });
+  }
 }
 
 export async function POST(request: Request) {

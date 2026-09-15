@@ -162,3 +162,37 @@ export async function learnDeterministicCapability(
     };
   }
 }
+
+export async function confirmDeterministicLearning(
+  capabilityId: string,
+  sessionId: string,
+  dependencies: Pick<DeterministicLearningDependencies, "registry" | "runStore"> & {
+    getSessionMessages(
+      sessionId: string,
+    ): Promise<Array<{ type: string; summary: string; data: string }>>;
+    containsGeneratedScript(
+      messages: Array<{ type: string; summary: string; data: string }>,
+    ): boolean;
+  },
+): Promise<SemanticCapability> {
+  const capability = dependencies.registry.getCapabilityById(capabilityId);
+  if (!capability?.execution || capability.executionState !== "learning") {
+    throw new Error(`Capability ${capabilityId} is not awaiting learning confirmation.`);
+  }
+  const run = dependencies.runStore.get(sessionId);
+  const result = dependencies.runStore.getResult(sessionId);
+  if (!run || run.capabilityId !== capabilityId || run.executionPhase !== "learning") {
+    throw new Error(`Session ${sessionId} is not a learning run for ${capabilityId}.`);
+  }
+  const validated = validateCapabilityResult(capability, capability.sourceExample, result);
+  if (!validated.structuredResult || validated.validationError) {
+    throw new Error(validated.validationError ?? "The stored learning result is invalid.");
+  }
+  const messages = await dependencies.getSessionMessages(sessionId);
+  if (!dependencies.containsGeneratedScript(messages)) {
+    throw new Error("Browser Use did not expose evidence that a reusable script was generated.");
+  }
+  dependencies.runStore.save({ ...run, status: "completed" });
+  dependencies.runStore.saveResult(sessionId, validated.structuredResult);
+  return dependencies.registry.markDeterministicReady(capabilityId);
+}

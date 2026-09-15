@@ -10,11 +10,18 @@ const repositories = [
 ];
 
 describe("GitHub capability result validation", () => {
-  it("accepts the exact count of qualifying GitHub repositories", () => {
-    expect(validateCapabilityResult(capability, parameters, { repositories })).toMatchObject({
+  it("accepts a wrapped object", () => {
+    expect(validateCapabilityResult(capability, parameters, { repositories })).toEqual({
       validationError: null,
       structuredResult: { repositories },
     });
+  });
+
+  it("accepts a top-level array and normalizes both envelopes identically", () => {
+    const wrapped = validateCapabilityResult(capability, parameters, { repositories });
+    const array = validateCapabilityResult(capability, parameters, repositories);
+    expect(array).toEqual(wrapped);
+    expect(array.structuredResult).toEqual({ repositories });
   });
 
   it("rejects a repository below the star threshold", () => {

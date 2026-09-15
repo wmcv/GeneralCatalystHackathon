@@ -3,7 +3,10 @@ import { createInMemoryCapabilityRegistry } from "../capabilities/registry";
 import type { SemanticCapability } from "../domain/capability";
 import { createInMemoryRunStore } from "../state/run-store";
 import type { DeterministicBrowserOutcome } from "./deterministic-executor";
-import { learnDeterministicCapability } from "./learn-deterministic-capability";
+import {
+  confirmDeterministicLearning,
+  learnDeterministicCapability,
+} from "./learn-deterministic-capability";
 
 const semanticCapability: SemanticCapability = {
   id: "capability-1",
@@ -43,6 +46,11 @@ const githubCapability: SemanticCapability = {
     { name: "min_stars", type: "number", required: true, description: "Minimum stars." },
     { name: "result_count", type: "number", required: true, description: "Count." },
   ],
+  sourceExample: {
+    query: "browser automation",
+    min_stars: 1000,
+    result_count: 3,
+  },
 };
 
 const outcome: DeterministicBrowserOutcome = {
@@ -166,5 +174,52 @@ describe("deterministic capability learning", () => {
     expect(runBrowserUseV3.mock.calls[0][1]).toContain(
       "find @{{3}} public repositories related to @{{browser automation}} with at least @{{1000}} stars",
     );
+  });
+
+  it("confirms a valid stored learning run after script evidence is observed", async () => {
+    registry.addCapability(githubCapability);
+    registry.beginDeterministicLearning(githubCapability.id, {
+      provider: "browser-use-v3",
+      mode: "cached-script",
+      workspaceId: "github-workspace",
+      taskTemplate: "Find @{{result_count}} GitHub repositories for @{{query}} above @{{min_stars}} stars.",
+      cacheScript: true,
+      autoHeal: false,
+    });
+    runStore.save({
+      id: "github-session",
+      task: "GitHub learning",
+      mode: "discovery",
+      status: "failed",
+      startedAt: "2026-09-15T16:00:00.000Z",
+      executionPhase: "learning",
+      capabilityId: githubCapability.id,
+    });
+    runStore.saveResult("github-session", {
+      repositories: Array.from({ length: 3 }, (_, index) => ({
+        name: `repo-${index}`,
+        owner: "owner",
+        stars: 2000,
+        url: `https://github.com/owner/repo-${index}`,
+        description: "Repository.",
+      })),
+    });
+
+    const confirmed = await confirmDeterministicLearning(
+      githubCapability.id,
+      "github-session",
+      {
+        registry,
+        runStore,
+        getSessionMessages: vi.fn().mockResolvedValue([{
+          type: "code_execution",
+          summary: "Run /workspace/scripts/github.py",
+          data: "{}",
+        }]),
+        containsGeneratedScript: vi.fn().mockReturnValue(true),
+      },
+    );
+    expect(confirmed.executionState).toBe("deterministic_ready");
+    expect(runStore.get("github-session")?.status).toBe("completed");
   });
 });

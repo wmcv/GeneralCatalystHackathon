@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("browser-use-sdk/v3", () => ({ BrowserUse: mocks.BrowserUse }));
 
-import { runDeterministicBrowserUseV3 } from "./deterministic-runner";
+import { containsGeneratedScript, runDeterministicBrowserUseV3 } from "./deterministic-runner";
 
 const execution = {
   provider: "browser-use-v3" as const,
@@ -79,5 +79,13 @@ describe("Browser Use V3 deterministic runner", () => {
     const result = await runDeterministicBrowserUseV3(execution, "Lookup @{{value}}");
     expect(result.error).toBe("run failed");
     expect(mocks.stop).toHaveBeenCalledWith("session-1", { strategy: "session" });
+  });
+
+  it("detects generated scripts exposed in a message summary", () => {
+    expect(containsGeneratedScript([{
+      type: "code_execution",
+      summary: "Running: python /workspace/scripts/cached.py",
+      data: "{}",
+    }])).toBe(true);
   });
 });

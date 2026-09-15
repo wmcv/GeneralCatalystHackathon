@@ -20,6 +20,30 @@ function parseResult(output: unknown) {
   }
 }
 
+export function containsGeneratedScript(
+  messages: Array<{ type: string; summary: string; data: string }>,
+): boolean {
+  return messages.some(
+    (item) => item.type === "code_execution" &&
+      /\/workspace\/scripts\//.test(`${item.summary} ${item.data}`),
+  );
+}
+
+export async function getBrowserUseV3SessionMessages(
+  sessionId: string,
+): Promise<Array<{ type: string; summary: string; data: string }>> {
+  const { BROWSER_USE_API_KEY } = getBrowserUseEnv();
+  const client = new BrowserUse({ apiKey: BROWSER_USE_API_KEY, maxRetries: 0 });
+  const messages: MessageResponse[] = [];
+  let after: string | null = null;
+  do {
+    const page = await client.sessions.messages(sessionId, { after, limit: 100 });
+    messages.push(...page.messages);
+    after = page.messages.length === 100 ? page.messages.at(-1)?.id ?? null : null;
+  } while (after);
+  return messages.map(({ type, summary, data }) => ({ type, summary, data }));
+}
+
 export async function runDeterministicBrowserUseV3(
   execution: BrowserUseCachedScriptExecution,
   task: string,
@@ -78,9 +102,7 @@ export async function runDeterministicBrowserUseV3(
     proxyCostUsd: result?.proxyCostUsd ?? null,
     totalCostUsd: result?.totalCostUsd ?? null,
     messages: messages.map(({ type, summary, data }) => ({ type, summary, data })),
-    scriptGenerated: messages.some(
-      (item) => item.type === "code_execution" && /\/workspace\/scripts\//.test(item.data),
-    ),
+    scriptGenerated: containsGeneratedScript(messages),
     rawResult: result?.output ?? null,
     ...parsed,
     error,
