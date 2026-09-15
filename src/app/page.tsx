@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { BrowserUseSpikeResponse } from "@/lib/browser-use/types";
 import type { SemanticCapability } from "@/lib/domain/capability";
 import type { CapabilityRouteDecision } from "@/lib/capabilities/router";
+import type { ReplayExecutionResult } from "@/lib/replay/execute-capability";
 
 const AGENT_02_TASK = "Find four ergonomic mice under $120 USD for programming";
 
@@ -13,6 +14,8 @@ export default function Home() {
   const [capability, setCapability] = useState<SemanticCapability | null>(null);
   const [compileError, setCompileError] = useState<string | null>(null);
   const [routeDecision, setRouteDecision] = useState<CapabilityRouteDecision | null>(null);
+  const [replayResult, setReplayResult] = useState<ReplayExecutionResult | null>(null);
+  const [replayRunning, setReplayRunning] = useState(false);
 
   async function runSpike() {
     setRunning(true);
@@ -42,6 +45,21 @@ export default function Home() {
       });
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function executeLearnedCapability() {
+    setReplayRunning(true);
+    setReplayResult(null);
+    try {
+      const response = await fetch("/api/replay/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: AGENT_02_TASK, requestingAgentId: "Agent 02" }),
+      });
+      setReplayResult((await response.json()) as ReplayExecutionResult);
+    } finally {
+      setReplayRunning(false);
     }
   }
 
@@ -173,9 +191,43 @@ export default function Home() {
                         <p key={name}>{name} = {String(value)}</p>
                       ))}
                     </div>
+                    <button
+                      className="border border-emerald-700 px-4 py-2 disabled:opacity-50"
+                      disabled={replayRunning}
+                      onClick={executeLearnedCapability}
+                      type="button"
+                    >
+                      [ {replayRunning ? "Executing…" : "Execute learned capability"} ]
+                    </button>
                   </div>
                 )}
                 {routeDecision && !routeDecision.matched && <p>{routeDecision.reason}</p>}
+                {replayResult && (
+                  <div className="space-y-2 border-t border-zinc-700 pt-3">
+                    <p>Status: {replayResult.status}</p>
+                    <p>Elapsed: {replayResult.elapsedMs} ms</p>
+                    <p>Cost: {replayResult.totalCostUsd ?? "unavailable"}</p>
+                    <p>
+                      Tokens: {replayResult.totalInputTokens ?? "unavailable"} input /{" "}
+                      {replayResult.totalOutputTokens ?? "unavailable"} output
+                    </p>
+                    {replayResult.liveViewUrl && (
+                      <a className="underline" href={replayResult.liveViewUrl} rel="noreferrer" target="_blank">
+                        Open live browser
+                      </a>
+                    )}
+                    {replayResult.structuredResult && (
+                      <pre className="overflow-auto whitespace-pre-wrap text-xs">
+                        {JSON.stringify(replayResult.structuredResult, null, 2)}
+                      </pre>
+                    )}
+                    {(replayResult.error || replayResult.validationError) && (
+                      <pre className="whitespace-pre-wrap text-red-400">
+                        {replayResult.error ?? replayResult.validationError}
+                      </pre>
+                    )}
+                  </div>
+                )}
               </section>
             )}
             {(result.error || result.validationError) && (

@@ -12,6 +12,9 @@ export const replayRunSchema = z.object({
   totalInputTokens: z.number().int().nonnegative().optional(),
   totalOutputTokens: z.number().int().nonnegative().optional(),
   totalCostUsd: z.number().nonnegative().optional(),
+  requestingAgentId: z.string().min(1).optional(),
+  capabilityId: z.string().min(1).optional(),
+  capabilityName: z.string().min(1).optional(),
 });
 
 export type ReplayRun = z.infer<typeof replayRunSchema>;
