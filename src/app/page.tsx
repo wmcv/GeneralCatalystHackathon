@@ -3,12 +3,16 @@
 import { useState } from "react";
 import type { BrowserUseSpikeResponse } from "@/lib/browser-use/types";
 import type { SemanticCapability } from "@/lib/domain/capability";
+import type { CapabilityRouteDecision } from "@/lib/capabilities/router";
+
+const AGENT_02_TASK = "Find four ergonomic mice under $120 USD for programming";
 
 export default function Home() {
   const [result, setResult] = useState<BrowserUseSpikeResponse | null>(null);
   const [running, setRunning] = useState(false);
   const [capability, setCapability] = useState<SemanticCapability | null>(null);
   const [compileError, setCompileError] = useState<string | null>(null);
+  const [routeDecision, setRouteDecision] = useState<CapabilityRouteDecision | null>(null);
 
   async function runSpike() {
     setRunning(true);
@@ -39,6 +43,16 @@ export default function Home() {
     } finally {
       setRunning(false);
     }
+  }
+
+  async function checkSharedMemory() {
+    const response = await fetch("/api/capabilities/route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: AGENT_02_TASK, requestingAgentId: "Agent 02" }),
+    });
+    const decision = (await response.json()) as CapabilityRouteDecision;
+    setRouteDecision(decision);
   }
 
   async function compileCapability() {
@@ -138,6 +152,30 @@ export default function Home() {
                     <p key={stage.stage}>{index + 1}. {stage.stage}</p>
                   ))}
                 </div>
+              </section>
+            )}
+            {capability && (
+              <section className="space-y-3 border border-zinc-700 p-4">
+                <p>AGENT 02</p>
+                <p>[ {AGENT_02_TASK} ]</p>
+                <button className="border border-zinc-600 px-4 py-2" onClick={checkSharedMemory} type="button">
+                  [ Check shared memory ]
+                </button>
+                {routeDecision?.matched && routeDecision.parameters && (
+                  <div className="space-y-2">
+                    <p className="text-emerald-400">KNOWN CAPABILITY FOUND</p>
+                    <p>{routeDecision.capabilityName}</p>
+                    <p>Learned by {capability.learnedByAgentId}</p>
+                    <p>Shared with organization</p>
+                    <div>
+                      <p>Parameters:</p>
+                      {Object.entries(routeDecision.parameters).map(([name, value]) => (
+                        <p key={name}>{name} = {String(value)}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {routeDecision && !routeDecision.matched && <p>{routeDecision.reason}</p>}
               </section>
             )}
             {(result.error || result.validationError) && (
