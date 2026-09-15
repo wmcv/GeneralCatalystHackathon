@@ -19,11 +19,18 @@ export const semanticCapabilitySchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
   intentSignature: z.string().min(1),
+  family: z.string().min(1),
+  version: z.number().int().positive(),
   parameters: z.array(capabilityParameterSchema),
   strategy: z.array(capabilityStageSchema),
   invariants: z.array(z.string().min(1)),
   fallbackTriggers: z.array(z.string().min(1)),
   learnedFromRunId: z.string().min(1),
+  learnedByAgentId: z.string().min(1),
+  scope: z.literal("organization"),
+  createdAt: z.string().datetime(),
+  successfulUses: z.number().int().nonnegative(),
+  sourceExample: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
 
 export type CapabilityParameter = z.infer<typeof capabilityParameterSchema>;

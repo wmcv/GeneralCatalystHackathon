@@ -4,6 +4,7 @@ import { BrowserUse, type RunEvent, type RunSummary } from "browser-use-sdk/v4";
 import { browserUseConfig, getBrowserUseEnv } from "./config";
 import { saveRunEvents } from "./event-store";
 import { normalizeBrowserUseEvents } from "@/lib/trace/normalize-browser-use";
+import { runStore } from "@/lib/state/run-store";
 import {
   browserUseSpikeResultSchema,
   type BrowserUseSpikeResponse,
@@ -125,6 +126,21 @@ export async function runBrowserUseSpike(): Promise<BrowserUseSpikeResponse> {
     }
 
     const { parsedResult, validationError } = parseResult(run.result);
+    const replayRun = runStore.save({
+      id: run.id,
+      task: run.task,
+      mode: "discovery",
+      status: run.status === "completed" ? "completed" : "failed",
+      startedAt: run.createdAt,
+      completedAt: run.updatedAt,
+      browserUseRunId: run.id,
+      durationMs: Date.parse(run.updatedAt) - Date.parse(run.createdAt),
+      totalInputTokens: run.totalInputTokens,
+      totalOutputTokens: run.totalOutputTokens,
+      totalCostUsd: Number(run.totalCostUsd),
+    });
+    if (parsedResult) runStore.saveResult(replayRun.id, parsedResult);
+
     return {
       runId,
       status: run.status,

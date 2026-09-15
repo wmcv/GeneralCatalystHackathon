@@ -2,10 +2,13 @@
 
 import { useState } from "react";
 import type { BrowserUseSpikeResponse } from "@/lib/browser-use/types";
+import type { SemanticCapability } from "@/lib/domain/capability";
 
 export default function Home() {
   const [result, setResult] = useState<BrowserUseSpikeResponse | null>(null);
   const [running, setRunning] = useState(false);
+  const [capability, setCapability] = useState<SemanticCapability | null>(null);
+  const [compileError, setCompileError] = useState<string | null>(null);
 
   async function runSpike() {
     setRunning(true);
@@ -36,6 +39,22 @@ export default function Home() {
     } finally {
       setRunning(false);
     }
+  }
+
+  async function compileCapability() {
+    if (!result?.runId) return;
+    setCompileError(null);
+    const response = await fetch("/api/capabilities/compile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runId: result.runId, learnedByAgentId: "Agent 01" }),
+    });
+    const body = (await response.json()) as { capability?: SemanticCapability; error?: string };
+    if (!response.ok || !body.capability) {
+      setCompileError(body.error ?? "Capability compilation failed.");
+      return;
+    }
+    setCapability(body.capability);
   }
 
   return (
@@ -93,6 +112,34 @@ export default function Home() {
                 <p className="mt-1 text-zinc-400">{product.whySuitable}</p>
               </div>
             ))}
+            {result.status === "completed" && result.parsedResult && !capability && (
+              <button
+                className="border border-zinc-600 px-4 py-2"
+                onClick={compileCapability}
+                type="button"
+              >
+                [ Compile capability ]
+              </button>
+            )}
+            {compileError && <pre className="whitespace-pre-wrap text-red-400">{compileError}</pre>}
+            {capability && (
+              <section className="space-y-3 border border-emerald-800 p-4">
+                <p className="text-emerald-400">CAPABILITY LEARNED</p>
+                <h2>{capability.name}</h2>
+                <p>Shared with organization</p>
+                <p>Learned by {capability.learnedByAgentId}</p>
+                <div>
+                  <p>Parameters:</p>
+                  {capability.parameters.map((parameter) => <p key={parameter.name}>{parameter.name}</p>)}
+                </div>
+                <div>
+                  <p>Strategy:</p>
+                  {capability.strategy.map((stage, index) => (
+                    <p key={stage.stage}>{index + 1}. {stage.stage}</p>
+                  ))}
+                </div>
+              </section>
+            )}
             {(result.error || result.validationError) && (
               <pre className="overflow-auto whitespace-pre-wrap text-red-400">
                 {result.error ?? result.validationError}

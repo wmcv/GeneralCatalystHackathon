@@ -1,23 +1,48 @@
-import { replayRunSchema, type ReplayRun } from "@/lib/domain/run";
+import { replayRunSchema, type ReplayRun } from "../domain/run";
 
 export interface RunStore {
   get(id: string): ReplayRun | undefined;
+  getResult(id: string): unknown | undefined;
   list(): ReplayRun[];
   save(run: ReplayRun): ReplayRun;
+  saveResult(id: string, result: unknown): void;
+  clearForTests(): void;
 }
 
-export function createInMemoryRunStore(): RunStore {
-  const runs = new Map<string, ReplayRun>();
+export function createInMemoryRunStore(
+  runs = new Map<string, ReplayRun>(),
+  results = new Map<string, unknown>(),
+): RunStore {
 
   return {
     get: (id) => runs.get(id),
+    getResult: (id) => results.get(id),
     list: () => Array.from(runs.values()),
     save(run) {
       const validatedRun = replayRunSchema.parse(run);
       runs.set(validatedRun.id, validatedRun);
       return validatedRun;
     },
+    saveResult(id, result) {
+      if (!runs.has(id)) throw new Error(`Cannot save a result for unknown run ${id}.`);
+      results.set(id, result);
+    },
+    clearForTests() {
+      runs.clear();
+      results.clear();
+    },
   };
 }
 
-export const runStore = createInMemoryRunStore();
+const globalRunState = globalThis as typeof globalThis & {
+  replayRuns?: Map<string, ReplayRun>;
+  replayRunResults?: Map<string, unknown>;
+};
+
+globalRunState.replayRuns ??= new Map<string, ReplayRun>();
+globalRunState.replayRunResults ??= new Map<string, unknown>();
+
+export const runStore = createInMemoryRunStore(
+  globalRunState.replayRuns,
+  globalRunState.replayRunResults,
+);
