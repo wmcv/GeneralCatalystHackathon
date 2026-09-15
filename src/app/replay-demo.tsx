@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GitHubRepositoryResearchResult } from "@/lib/browser-use/github-types";
 import type { CapabilityRouteDecision } from "@/lib/capabilities/router";
 import type { SemanticCapability } from "@/lib/domain/capability";
@@ -61,6 +61,7 @@ export default function ReplayDemo() {
   const [replay, setReplay] = useState<DeterministicExecutionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const pendingRequest = useRef(false);
 
   useEffect(() => {
     if (state !== "learning" && state !== "replaying") return;
@@ -74,6 +75,8 @@ export default function ReplayDemo() {
   }, [state]);
 
   async function learnTask() {
+    if (pendingRequest.current) return;
+    pendingRequest.current = true;
     setState("learning");
     setElapsed(0);
     setActivityIndex(0);
@@ -102,10 +105,14 @@ export default function ReplayDemo() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       setState("error");
+    } finally {
+      pendingRequest.current = false;
     }
   }
 
   async function checkMemory() {
+    if (pendingRequest.current) return;
+    pendingRequest.current = true;
     setState("lookup");
     try {
       const [response] = await Promise.all([
@@ -119,10 +126,14 @@ export default function ReplayDemo() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       setState("error");
+    } finally {
+      pendingRequest.current = false;
     }
   }
 
   async function runInstantly() {
+    if (pendingRequest.current) return;
+    pendingRequest.current = true;
     setState("replaying");
     setElapsed(0);
     try {
@@ -134,10 +145,13 @@ export default function ReplayDemo() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       setState("error");
+    } finally {
+      pendingRequest.current = false;
     }
   }
 
   function reset() {
+    if (pendingRequest.current) return;
     setState("initial"); setLearning(null); setReplay(null); setRouteDecision(null); setError(null); setMemoryOpen(false);
   }
 
@@ -145,7 +159,7 @@ export default function ReplayDemo() {
   return (
     <main className="demo-shell">
       <header className="brand-row">
-        <button className="wordmark" onClick={reset} type="button">REPLAY</button>
+        <button className="wordmark" disabled={state === "learning" || state === "lookup" || state === "replaying"} onClick={reset} type="button">REPLAY</button>
         {memoryVisible && <div className="memory-wrap"><button className="memory-button" onClick={() => setMemoryOpen((open) => !open)} type="button"><span>Memory</span><strong>1 capability</strong></button>{memoryOpen && <MemoryPopover capability={capability} />}</div>}
       </header>
       <section className="stage" aria-live="polite">
@@ -159,7 +173,7 @@ export default function ReplayDemo() {
         {state === "complete" && replay && <CompleteAct learning={learning} replay={replay} />}
         {state === "error" && <ErrorAct error={error} onReset={reset} />}
       </section>
-      <footer className="demo-footer">Research Agent <span /> Organization: Demo Workspace</footer>
+      <footer className="demo-footer"><span className="footer-context">Research Agent <i /> Organization: Demo Workspace</span><button disabled={state === "learning" || state === "lookup" || state === "replaying"} onClick={reset} type="button">Reset demo</button></footer>
     </main>
   );
 }
@@ -195,8 +209,8 @@ function CompleteAct({ learning, replay }: { learning: DeterministicLearningResu
   const learningMs = learned?.elapsedMs ?? 50_664;
   const learningCost = Number(learned?.totalCostUsd ?? 0.013918);
   const replayCost = Number(replay.totalCostUsd ?? 0.0003333333);
-  const speedup = learningMs / replay.elapsedMs;
-  const cheaper = learningCost / replayCost;
+  const speedup = safeRatio(learningMs, replay.elapsedMs, 12);
+  const cheaper = safeRatio(learningCost, replayCost, 42);
   const discoveryRepositories = repositoriesFrom(learned?.structuredResult);
   return <div className="act complete-act"><p className="act-number">REPLAY REMEMBERED</p><div className="hero-metrics"><p><strong>{Math.round(speedup)}×</strong><span>faster</span></p><p><strong>{Math.round(cheaper)}×</strong><span>cheaper</span></p><p><strong>0</strong><span>LLM tokens</span></p></div><Comparison learning={learned} replay={replay} /><div className="result-columns"><RepositoryList title="Agent 01 · browser automation" repositories={discoveryRepositories.length > 0 ? discoveryRepositories : DISCOVERY_REPOSITORIES} /><RepositoryList title="Agent 02 · workflow orchestration" repositories={repositoriesFrom(replay.structuredResult)} /></div></div>;
 }
@@ -225,8 +239,10 @@ function MemoryPopover({ capability }: { capability: SemanticCapability }) { ret
 function ErrorAct({ error, onReset }: { error: string | null; onReset(): void }) { return <div className="act error-act"><p className="act-number">SOMETHING CHANGED</p><h2>Replay paused.</h2><p>{error ?? "The demo could not continue."}</p><PrimaryButton onClick={onReset}>Start demo</PrimaryButton></div>; }
 function PrimaryButton({ children, onClick }: { children: React.ReactNode; onClick(): void }) { return <button className="primary-button" onClick={onClick} type="button">{children}<span>→</span></button>; }
 function TextButton({ children, onClick }: { children: React.ReactNode; onClick(): void }) { return <button className="text-button" onClick={onClick} type="button">{children} <span>→</span></button>; }
-function formatSeconds(ms: number) { return `${(ms / 1000).toFixed(1)}s`; }
-function formatMetricSeconds(ms: number) { return `${(ms / 1000).toFixed(3)}s`; }
-function formatInteger(value: number) { return new Intl.NumberFormat("en-US").format(value); }
-function formatUsd(value: string) { return `$${Number(value).toFixed(Number(value) === 0 ? 0 : 6)}`; }
+function finiteNumber(value: number, fallback = 0) { return Number.isFinite(value) ? value : fallback; }
+function safeRatio(numerator: number, denominator: number, fallback: number) { return denominator > 0 && Number.isFinite(numerator / denominator) ? numerator / denominator : fallback; }
+function formatSeconds(ms: number) { return `${(finiteNumber(ms) / 1000).toFixed(1)}s`; }
+function formatMetricSeconds(ms: number) { return `${(finiteNumber(ms) / 1000).toFixed(3)}s`; }
+function formatInteger(value: number) { return new Intl.NumberFormat("en-US").format(finiteNumber(value)); }
+function formatUsd(value: string) { const amount = Number(value); return `$${finiteNumber(amount).toFixed(amount === 0 ? 0 : 6)}`; }
 function formatStars(value: number) { return `${(value / 1000).toFixed(1)}k`; }

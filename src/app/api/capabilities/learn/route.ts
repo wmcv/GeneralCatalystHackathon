@@ -13,6 +13,7 @@ import {
   learnDeterministicCapability,
 } from "@/lib/replay/learn-deterministic-capability";
 import { runStore } from "@/lib/state/run-store";
+import { acquireOperation, releaseOperation } from "@/lib/state/operation-lock";
 
 export const runtime = "nodejs";
 export const maxDuration = 900;
@@ -52,6 +53,13 @@ export async function PATCH(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const operationKey = "github-capability-learning";
+  if (!acquireOperation(operationKey)) {
+    return NextResponse.json(
+      { error: "Capability learning is already in progress." },
+      { status: 409 },
+    );
+  }
   try {
     const input = requestSchema.parse(await request.json());
     const capability = capabilityRegistry.addCapability(input.capability);
@@ -66,5 +74,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 400 });
+  } finally {
+    releaseOperation(operationKey);
   }
 }

@@ -4,6 +4,7 @@ import { runDeterministicBrowserUseV3 } from "@/lib/browser-use/deterministic-ru
 import { capabilityRegistry } from "@/lib/capabilities/registry";
 import { executeRoutedDeterministicCapability } from "@/lib/replay/deterministic-executor";
 import { runStore } from "@/lib/state/run-store";
+import { acquireOperation, releaseOperation } from "@/lib/state/operation-lock";
 
 export const runtime = "nodejs";
 export const maxDuration = 900;
@@ -14,6 +15,13 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const operationKey = "github-deterministic-replay";
+  if (!acquireOperation(operationKey)) {
+    return NextResponse.json(
+      { error: "Deterministic replay is already in progress." },
+      { status: 409 },
+    );
+  }
   try {
     const input = requestSchema.parse(await request.json());
     const result = await executeRoutedDeterministicCapability(input, {
@@ -25,5 +33,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 400 });
+  } finally {
+    releaseOperation(operationKey);
   }
 }
