@@ -3,6 +3,7 @@ import "server-only";
 import { BrowserUse, type RunEvent, type RunSummary } from "browser-use-sdk/v4";
 import { browserUseConfig, getBrowserUseEnv } from "./config";
 import { saveRunEvents } from "./event-store";
+import { normalizeBrowserUseEvents } from "@/lib/trace/normalize-browser-use";
 import {
   browserUseSpikeResultSchema,
   type BrowserUseSpikeResponse,
@@ -139,6 +140,8 @@ export async function runBrowserUseSpike(): Promise<BrowserUseSpikeResponse> {
       error: run.error,
       eventTypes: events.map((event) => event.type),
       liveViewUrlObserved: liveViewUrl !== null,
+      liveViewUrl,
+      traceEvents: normalizeBrowserUseEvents(events),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -158,6 +161,8 @@ export async function runBrowserUseSpike(): Promise<BrowserUseSpikeResponse> {
       error: message,
       eventTypes: events.map((event) => event.type),
       liveViewUrlObserved: false,
+      liveViewUrl: null,
+      traceEvents: normalizeBrowserUseEvents(events),
     };
   }
 }

@@ -30,6 +30,8 @@ export default function Home() {
         error: error instanceof Error ? error.message : String(error),
         eventTypes: [],
         liveViewUrlObserved: false,
+        liveViewUrl: null,
+        traceEvents: [],
       });
     } finally {
       setRunning(false);
@@ -63,6 +65,26 @@ export default function Home() {
               Tokens: {result.totalInputTokens ?? "unavailable"} input /{" "}
               {result.totalOutputTokens ?? "unavailable"} output
             </p>
+            {result.liveViewUrl && (
+              <p>
+                <a className="underline" href={result.liveViewUrl} rel="noreferrer" target="_blank">
+                  Open live browser
+                </a>
+              </p>
+            )}
+            {result.traceEvents.length > 0 && (
+              <ol className="space-y-1 border-l border-zinc-700 pl-4">
+                {result.traceEvents.map((event) => (
+                  <li key={event.id}>
+                    <span className="text-zinc-500">
+                      {formatElapsed(result.traceEvents[0].timestamp, event.timestamp)}
+                    </span>{" "}
+                    {event.label}
+                    {event.detail && <span className="text-zinc-500"> — {event.detail}</span>}
+                  </li>
+                ))}
+              </ol>
+            )}
             {result.parsedResult?.products.map((product) => (
               <div className="border border-zinc-800 p-3" key={product.url}>
                 <a className="underline" href={product.url} rel="noreferrer" target="_blank">
@@ -81,4 +103,14 @@ export default function Home() {
       </div>
     </main>
   );
+}
+
+function formatElapsed(firstTimestamp: string, timestamp: string): string {
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((Date.parse(timestamp) - Date.parse(firstTimestamp)) / 1000),
+  );
+  const minutes = Math.floor(elapsedSeconds / 60).toString().padStart(2, "0");
+  const seconds = (elapsedSeconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }

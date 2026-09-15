@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { TraceEvent } from "@/lib/trace/types";
 
 export const browserUseSpikeResultSchema = z.object({
   summary: z.string(),
@@ -36,4 +37,6 @@ export interface BrowserUseSpikeResponse {
   error: string | null;
   eventTypes: string[];
   liveViewUrlObserved: boolean;
+  liveViewUrl: string | null;
+  traceEvents: TraceEvent[];
 }
