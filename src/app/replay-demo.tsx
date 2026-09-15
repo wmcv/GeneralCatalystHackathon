@@ -103,7 +103,7 @@ export default function ReplayDemo() {
     if (pendingRequest.current) return;
     pendingRequest.current = true; setState("lookup"); setError(null);
     try {
-      const [response] = await Promise.all([fetch("/api/capabilities/route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task: agent3Prompt, requestingAgentId: "Agent 03" }) }), new Promise((resolve) => window.setTimeout(resolve, 700))]);
+      const [response] = await Promise.all([fetch("/api/capabilities/route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task: agent3Prompt, requestingAgentId: "Agent 03", capability }) }), new Promise((resolve) => window.setTimeout(resolve, 700))]);
       const decision = await response.json() as CapabilityRouteDecision;
       if (!response.ok || !decision.matched) throw new Error(decision.reason);
       setRouteDecision(decision); setState("found");
@@ -118,7 +118,8 @@ export default function ReplayDemo() {
   }
 
   async function executeDeterministically(task: string, requestingAgentId: string) {
-    const response = await fetch("/api/replay/deterministic", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task, requestingAgentId }) });
+    if (!capability) throw new Error("No learned capability is available for replay.");
+    const response = await fetch("/api/replay/deterministic", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task, requestingAgentId, capability }) });
     const body = await response.json() as DeterministicExecutionResult;
     if (!response.ok || !body.deterministicSuccess) throw new Error(body.validationError ?? body.error ?? "Deterministic execution failed.");
     return body;

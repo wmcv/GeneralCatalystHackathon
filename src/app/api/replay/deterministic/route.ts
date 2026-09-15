@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runDeterministicBrowserUseV3 } from "@/lib/browser-use/deterministic-runner";
-import { capabilityRegistry } from "@/lib/capabilities/registry";
+import { capabilityRegistry, createInMemoryCapabilityRegistry } from "@/lib/capabilities/registry";
+import { semanticCapabilitySchema } from "@/lib/domain/capability";
 import { executeRoutedDeterministicCapability } from "@/lib/replay/deterministic-executor";
 import { runStore } from "@/lib/state/run-store";
 import { acquireOperation, releaseOperation } from "@/lib/state/operation-lock";
@@ -12,6 +13,7 @@ export const maxDuration = 300;
 const requestSchema = z.object({
   task: z.string().min(1),
   requestingAgentId: z.string().min(1),
+  capability: semanticCapabilitySchema.optional(),
 });
 
 export async function POST(request: Request) {
@@ -24,8 +26,11 @@ export async function POST(request: Request) {
   }
   try {
     const input = requestSchema.parse(await request.json());
+    const registry = input.capability
+      ? createInMemoryCapabilityRegistry(new Map([[input.capability.id, input.capability]]))
+      : capabilityRegistry;
     const result = await executeRoutedDeterministicCapability(input, {
-      registry: capabilityRegistry,
+      registry,
       runStore,
       runBrowserUseV3: runDeterministicBrowserUseV3,
     });
