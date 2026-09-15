@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Replay",
-  description: "Agents should explore once. Then remember how.",
+  description: "One agent learns. Every agent remembers.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
