@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { vi } from "vitest";
 import type { SemanticCapability } from "../domain/capability";
 import type { LlmAdapter } from "../llm/types";
-import { decideReplay } from "./decide";
+import { decideReplay, isReusableCapabilityProposal } from "./decide";
 import type { ReplayDecision } from "./types";
 
 vi.mock("server-only", () => ({}));
@@ -36,6 +36,26 @@ function adapter(decision: ReplayDecision): LlmAdapter {
 const reuse: ReplayDecision = { decision: "reuse", reasoningSummary: "Strong match.", capabilityId: "github-capability", confidence: 0.96, parameters: { query: "agents", min_stars: 500, result_count: 4 } };
 
 describe("Replay decision engine", () => {
+  it("reconsiders a strongly reusable GitHub task once and induces a parameterized capability", async () => {
+    const completeJson = vi.fn()
+      .mockResolvedValueOnce({ data: { decision: "learn", reasoningSummary: "No match.", confidence: 0.5, reusable: false }, usage: { model: "test", inputTokens: 30, outputTokens: 10, costUsd: 0.001, latencyMs: 5 } })
+      .mockResolvedValueOnce({ data: { decision: "learn", reasoningSummary: "Stable GitHub workflow.", confidence: 0.95, proposedCapability: { name: "github_repository_research", description: "Find GitHub repositories by topic and star threshold.", family: "github_repository_research", surface: { kind: "website", origin: "https://github.com" }, parameters: [{ name: "query", type: "string", description: "Topic query.", value: "browser automation" }, { name: "min_stars", type: "number", description: "Minimum stars.", value: 1000 }, { name: "result_count", type: "number", description: "Number of results.", value: 3 }], taskTemplate: "On GitHub find @{{result_count}} repositories for @{{query}} with more than @{{min_stars}} stars." } }, usage: { model: "test", inputTokens: 40, outputTokens: 30, costUsd: 0.002, latencyMs: 6 } });
+    const result = await decideReplay({ task: "Find 3 GitHub repositories for browser automation with more than 1,000 stars.", availableCapabilities: [] }, { completeJson } as unknown as LlmAdapter);
+    expect(completeJson).toHaveBeenCalledTimes(2);
+    expect(result.decision).toMatchObject({ decision: "learn", proposedCapability: { name: "github_repository_research", parameters: [{ value: "browser automation" }, { value: 1000 }, { value: 3 }] } });
+    expect(result.decision.proposedCapability?.taskTemplate).toContain("@{{query}}");
+    expect(result.reconsideration).toMatchObject({ inputTokens: 40, outputTokens: 30 });
+  });
+
+  it("performs at most one reconsideration and rejects generic capability proposals", async () => {
+    const nonReusable = { data: { decision: "learn", reasoningSummary: "Still too generic.", confidence: 0.2, reusable: false }, usage: { model: "test", inputTokens: 10, outputTokens: 5, costUsd: 0, latencyMs: 1 } };
+    const completeJson = vi.fn().mockResolvedValue(nonReusable);
+    const result = await decideReplay({ task: "Find 3 GitHub repositories about browser agents over 1,000 stars", availableCapabilities: [] }, { completeJson } as unknown as LlmAdapter);
+    expect(completeJson).toHaveBeenCalledTimes(2);
+    expect(result.decision).toMatchObject({ decision: "learn", reusable: false });
+    expect(isReusableCapabilityProposal({ name: "generic_web_task", description: "Anything", family: "generic_web_task", surface: { kind: "web" }, parameters: [{ name: "query", type: "string", description: "Query", value: "x" }], taskTemplate: "Search for @{{query}}" })).toBe(false);
+  });
+
   it("chooses only an existing capability and extracts parameters", async () => {
     const result = await decideReplay({ task: "Find four GitHub repositories for agents above 500 stars", availableCapabilities: [capability()] }, adapter(reuse));
     expect(result.decision).toMatchObject({ decision: "reuse", capabilityId: "github-capability", parameters: reuse.parameters });

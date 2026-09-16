@@ -30,6 +30,7 @@ export interface ReplayTaskResult {
   metrics: {
     elapsedMs: number;
     routing: LlmUsage | null;
+    induction: LlmUsage | null;
     transformation: LlmUsage | null;
     execution: { inputTokens: number; outputTokens: number; llmCostUsd: number; browserCostUsd: number; totalCostUsd: number };
   };
@@ -116,8 +117,12 @@ export async function orchestrateReplayTask(
   const runId = randomUUID();
   const trace: TraceEvent[] = [];
   const record = (...events: TraceEvent[]) => {
-    trace.push(...events);
-    for (const event of events) onTrace?.(event);
+    for (const event of events) {
+      const previous = trace.at(-1);
+      if (previous?.actor === event.actor && previous.label === event.label && previous.detail === event.detail) continue;
+      trace.push(event);
+      onTrace?.(event);
+    }
   };
   let streamedBrowserMessage = false;
   let browserActor: "agent" | "executor" = "agent";
@@ -198,7 +203,7 @@ export async function orchestrateReplayTask(
       deterministicReady: outcome.deterministicSuccess,
       result,
       trace,
-      metrics: { elapsedMs: Date.now() - started, routing: routing.routing, transformation, execution: executionMetrics(outcome) },
+      metrics: { elapsedMs: Date.now() - started, routing: routing.routing, induction: routing.reconsideration ?? null, transformation, execution: executionMetrics(outcome) },
       error: compositionError ?? (outcome.deterministicSuccess ? null : outcome.validationError ?? outcome.error ?? "Deterministic execution failed."),
     };
   }
@@ -228,12 +233,13 @@ export async function orchestrateReplayTask(
     return {
       runId, prompt: input.task, agentId: input.agentId, decision: "learn",
       capability: null, deterministicReady: false, result: outcome?.structuredResult ?? null, trace,
-      metrics: { elapsedMs: Date.now() - started, routing: routing.routing, transformation: null, execution: executionMetrics(outcome) },
+      metrics: { elapsedMs: Date.now() - started, routing: routing.routing, induction: routing.reconsideration ?? null, transformation: null, execution: executionMetrics(outcome) },
       error: outcome?.error ?? null,
     };
   }
-  record(replayTrace(runId, "replay", "Proposing new capability", proposal.name));
-  record(replayTrace(runId, "agent", "Starting browser exploration…"));
+  record(replayTrace(runId, "replay", "Reusable procedure identified.", proposal.name));
+  record(replayTrace(runId, "replay", `Learning ${proposal.name}…`));
+  record(replayTrace(runId, "agent", "Exploring task…"));
   const capability = dependencies.registry.addCapability(capabilityFromProposal(proposal, input.agentId, runId));
   const parameters = Object.fromEntries(proposal.parameters.map((parameter) => [parameter.name, parameter.value]));
   const learned = await learnDeterministicCapability(
@@ -260,13 +266,14 @@ export async function orchestrateReplayTask(
     learned.error ?? undefined,
   ));
   if (learned.deterministicReady) record(replayTrace(runId, "replay", "Published to collective memory."));
+  else dependencies.registry.removeCapability(capability.id);
   return {
     runId, prompt: input.task, agentId: input.agentId, decision: "learn",
-    capability: learned.capability,
+    capability: learned.deterministicReady ? learned.capability : null,
     deterministicReady: learned.deterministicReady,
     result: learned.outcome?.structuredResult ?? null,
     trace,
-    metrics: { elapsedMs: Date.now() - started, routing: routing.routing, transformation: null, execution: executionMetrics(learned.outcome) },
+    metrics: { elapsedMs: Date.now() - started, routing: routing.routing, induction: routing.reconsideration ?? null, transformation: null, execution: executionMetrics(learned.outcome) },
     error: learned.outcome?.structuredResult ? null : learned.error,
   };
 }

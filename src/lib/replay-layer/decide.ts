@@ -2,7 +2,7 @@ import { extractGitHubRepositoryResearchParameters, routeCapability } from "../c
 import { createInMemoryCapabilityRegistry } from "../capabilities/registry";
 import type { LlmAdapter } from "../llm/types";
 import { openRouterAdapter } from "../llm/openrouter";
-import { buildReplayDecisionPrompt, replayDecisionSystemPrompt } from "./prompts";
+import { buildReplayDecisionPrompt, buildReplayInductionPrompt, replayDecisionSystemPrompt, replayInductionSystemPrompt } from "./prompts";
 import {
   replayDecisionRequestSchema,
   replayDecisionResultSchema,
@@ -126,6 +126,16 @@ function safeDecision(input: ReplayDecisionRequest, proposed: ReplayDecision): R
   return proposed;
 }
 
+export function hasStrongReusableSignals(task: string): boolean {
+  const signals = [
+    /https?:\/\/|\b(?:github|gitlab|linkedin|amazon|hacker news|documentation|docs|website|site)\b/i.test(task),
+    /\b(?:find|return|list|get|show|search(?: for)?)\s+\d+\b/i.test(task),
+    /\b(?:about|for|related to|matching|query|topic)\b/i.test(task),
+    /(?:>|<|at least|more than|fewer than|under|over|minimum|maximum)\s*[\d,]+|[\d,]+\s*(?:stars?|results?|items?)/i.test(task),
+  ];
+  return signals.filter(Boolean).length >= 2;
+}
+
 export async function decideReplay(
   request: ReplayDecisionRequest,
   adapter: LlmAdapter = openRouterAdapter,
@@ -138,12 +148,28 @@ export async function decideReplay(
       schema: replayDecisionSchema,
       schemaName: "replay_decision",
     });
-    const decision = safeDecision(input, completion.data);
-    return replayDecisionResultSchema.parse({ decision, routing: completion.usage, fallbackUsed: false });
+    let decision = safeDecision(input, completion.data);
+    let reconsideration: typeof completion.usage | null = null;
+    if (decision.decision === "learn" && !isReusableCapabilityProposal(decision.proposedCapability) && hasStrongReusableSignals(input.task)) {
+      try {
+        const retry = await adapter.completeJson({
+          system: replayInductionSystemPrompt,
+          prompt: buildReplayInductionPrompt(input),
+          schema: replayDecisionSchema,
+          schemaName: "replay_induction_reconsideration",
+        });
+        reconsideration = retry.usage;
+        decision = safeDecision(input, retry.data);
+      } catch {
+        // A failed bounded reconsideration leaves the safe first-pass decision unchanged.
+      }
+    }
+    return replayDecisionResultSchema.parse({ decision, routing: completion.usage, reconsideration, fallbackUsed: false });
   } catch {
     return replayDecisionResultSchema.parse({
       decision: fallbackDecision(input),
       routing: null,
+      reconsideration: null,
       fallbackUsed: true,
     });
   }

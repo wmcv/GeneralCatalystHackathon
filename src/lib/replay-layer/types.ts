@@ -46,6 +46,7 @@ export const replayDecisionRequestSchema = z.object({
 export const replayDecisionResultSchema = z.object({
   decision: replayDecisionSchema,
   routing: llmUsageSchema.nullable(),
+  reconsideration: llmUsageSchema.nullable().optional(),
   fallbackUsed: z.boolean(),
 });
 

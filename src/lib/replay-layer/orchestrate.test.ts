@@ -57,6 +57,7 @@ describe("dynamic learning orchestration", () => {
     expect(registry.listCapabilities()[0].executionState).toBe("deterministic_ready");
     expect(new Set(result.trace.map((event) => event.actor))).toEqual(new Set(["user", "replay", "agent"]));
     expect(streamedTrace).toEqual(result.trace);
+    expect(result.trace.some((event) => event.actor === "executor" || event.label.includes("Running learned"))).toBe(false);
     expect(result.metrics).toMatchObject({ routing: { inputTokens: 50, outputTokens: 25 }, execution: { inputTokens: 120, outputTokens: 20 } });
   });
 
@@ -81,6 +82,24 @@ describe("dynamic learning orchestration", () => {
     expect(runBrowserUseV3.mock.invocationCallOrder[0]).toBeLessThan(postProcess.mock.invocationCallOrder[0]);
     expect(postProcess).toHaveBeenCalledWith({ originalTask: expect.any(String), remainingTask: "Compare the top two returned repositories.", capabilityResult: githubOutcome.structuredResult });
     expect(result).toMatchObject({ decision: "compose", metrics: { transformation: { inputTokens: 120, outputTokens: 60 } } });
+    expect(result.trace).toContainEqual(expect.objectContaining({ actor: "executor", label: "Running learned procedure…" }));
+  });
+
+  it("does not publish a capability when learning fails readiness checks", async () => {
+    const registry = createInMemoryCapabilityRegistry();
+    const result = await orchestrateReplayTask(
+      { task: "Find deployment documentation", agentId: "Agent 01" },
+      {
+        registry, runStore: createInMemoryRunStore(),
+        decide: vi.fn().mockResolvedValue({ decision: { decision: "learn", reasoningSummary: "Reusable docs lookup.", confidence: 0.9, proposedCapability: { name: "documentation_lookup", description: "Find product documentation.", family: "documentation_lookup", surface: { kind: "web" }, parameters: [{ name: "topic", type: "string", description: "Topic.", value: "deployment" }], taskTemplate: "Find documentation for @{{topic}}." } }, routing: null, fallbackUsed: false }),
+        runBrowserUseV3: vi.fn().mockResolvedValue({ ...outcome, scriptGenerated: false }),
+        createWorkspace: vi.fn().mockResolvedValue({ id: "workspace-1" }), deleteWorkspace: vi.fn(),
+      },
+    );
+    expect(result.deterministicReady).toBe(false);
+    expect(result.capability).toBeNull();
+    expect(registry.listCapabilities()).toEqual([]);
+    expect(result.trace.some((event) => event.label === "Published to collective memory.")).toBe(false);
   });
 
   it("completes a non-reusable novel run without publishing a capability", async () => {
