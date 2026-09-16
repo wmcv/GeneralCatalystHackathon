@@ -58,25 +58,27 @@ export function browserMessageEvent(
   const summary = message.summary.trim();
   if (!summary) return null;
   const structured = structuredSummary(summary);
-  if (structured) return replayTrace(runId, "agent", structured.label, structured.detail);
+  const technicalDetails = { type: message.type, summary: message.summary, data: message.data };
+  if (structured) return replayTrace(runId, actor, structured.label, structured.detail, { technicalDetails });
   const combined = `${message.type} ${summary}`;
-  const label = /search|find/i.test(combined)
-    ? "Searching…"
-    : /inspect|visit|open|browse/i.test(combined)
-      ? "Inspecting results…"
-      : /filter|constraint|star/i.test(combined)
-        ? "Filtering results…"
-        : /extract|collect|parse/i.test(combined)
-          ? "Extracting…"
-          : /code_execution/i.test(message.type)
-            ? "Running learned steps…"
-            : "Agent working…";
+  const label = /bash|python|script|code_execution/i.test(message.type)
+    ? actor === "executor" ? "Running learned procedure…" : "Building and testing procedure…"
+    : /fetch/i.test(message.type)
+      ? "Inspecting sources…"
+      : /web[_ ]?search|search|find/i.test(combined)
+        ? "Searching the web…"
+        : /inspect|visit|open|browse/i.test(combined)
+          ? "Inspecting sources…"
+          : /filter|constraint|star/i.test(combined)
+            ? "Filtering results…"
+            : /extract|collect|parse/i.test(combined)
+              ? "Extracting…"
+              : "Agent working…";
   return replayTrace(
     runId,
     actor,
     label,
-    summary.startsWith("{") || summary.startsWith("[")
-      ? undefined
-      : summary.replace(/\/workspace\/[^\s]+/g, "the learned procedure"),
+    undefined,
+    { technicalDetails },
   );
 }

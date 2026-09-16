@@ -150,6 +150,9 @@ button { color:inherit; }
 .trace-row > span { padding-top:3px; color:#5f5f5c; }
 .trace-row div p,.trace-row > p { margin:0; color:#c2c2be; font-size:14px; line-height:1.5; }
 .trace-row small { display:block; max-width:620px; margin-top:3px; overflow-wrap:anywhere; color:#666663; font-size:11px; line-height:1.5; white-space:pre-line; }
+.technical-details { margin-top:6px; color:#5f5f5c; font:10px/1.5 "SFMono-Regular",Consolas,monospace; }
+.technical-details summary { cursor:pointer; }
+.technical-details pre { max-width:620px; max-height:180px; overflow:auto; margin:7px 0 0; padding:9px 11px; border-left:1px solid #292927; color:#666663; white-space:pre-wrap; overflow-wrap:anywhere; }
 .trace-row:nth-last-child(1) > span { color:var(--accent); }
 .live-trace-row { position:relative; }
 .live-trace-row .trace-row > span { color:#6f9e81; }
