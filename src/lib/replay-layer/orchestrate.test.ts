@@ -83,6 +83,8 @@ describe("dynamic learning orchestration", () => {
     expect(postProcess).toHaveBeenCalledWith({ originalTask: expect.any(String), remainingTask: "Compare the top two returned repositories.", capabilityResult: githubOutcome.structuredResult });
     expect(result).toMatchObject({ decision: "compose", metrics: { transformation: { inputTokens: 120, outputTokens: 60 } } });
     expect(result.trace).toContainEqual(expect.objectContaining({ actor: "executor", label: "Running learned procedure…" }));
+    expect(registry.findByFamily("result_comparison")).toHaveLength(1);
+    expect(result.trace).toContainEqual(expect.objectContaining({ actor: "replay", label: "Comparison capability learned" }));
   });
 
   it("does not publish a capability when learning fails readiness checks", async () => {

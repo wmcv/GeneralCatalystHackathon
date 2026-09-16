@@ -21,7 +21,7 @@ const FORBIDDEN_CAPABILITY_NAMES = new Set([
 ]);
 
 function githubComposition(input: ReplayDecisionRequest): ReplayDecision | null {
-  const match = input.task.match(/^(.+?\bstars?)[,.]?\s*(?:then\s+)?(.+)$/i);
+  const match = input.task.match(/^(.+?\bstars?)\s*(?:,\s*then\s+|,\s*|\s+then\s+)(.+)$/i);
   if (!match) return null;
   const parameters = extractGitHubRepositoryResearchParameters(match[1]);
   const capability = input.availableCapabilities.find((item) =>
@@ -141,6 +141,19 @@ export async function decideReplay(
   adapter: LlmAdapter = openRouterAdapter,
 ): Promise<ReplayDecisionResult> {
   const input = replayDecisionRequestSchema.parse(request);
+  const provenDecision = safeDecision(input, fallbackDecision(input));
+  if (
+    provenDecision.decision === "reuse" ||
+    provenDecision.decision === "compose" ||
+    isReusableCapabilityProposal(provenDecision.proposedCapability)
+  ) {
+    return replayDecisionResultSchema.parse({
+      decision: provenDecision,
+      routing: null,
+      reconsideration: null,
+      fallbackUsed: true,
+    });
+  }
   try {
     const completion = await adapter.completeJson({
       system: replayDecisionSystemPrompt,
@@ -162,6 +175,10 @@ export async function decideReplay(
         decision = safeDecision(input, retry.data);
       } catch {
         // A failed bounded reconsideration leaves the safe first-pass decision unchanged.
+      }
+      if (!isReusableCapabilityProposal(decision.proposedCapability)) {
+        const provenFallback = fallbackDecision({ ...input, availableCapabilities: [] });
+        if (isReusableCapabilityProposal(provenFallback.proposedCapability)) decision = provenFallback;
       }
     }
     return replayDecisionResultSchema.parse({ decision, routing: completion.usage, reconsideration, fallbackUsed: false });

@@ -52,16 +52,17 @@ export interface GitHubRepositoryResearchParameters extends Record<string, strin
 
 export function extractGitHubRepositoryResearchParameters(
   task: string,
+  defaults?: Partial<Pick<GitHubRepositoryResearchParameters, "min_stars" | "result_count">>,
 ): GitHubRepositoryResearchParameters | null {
   const normalizedTask = task.trim().replace(/[.?!]+$/, "");
   const intent = normalizedTask.match(
-    /^(find|recommend|suggest)\s+(?:(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+)?github\s+(?:repositories|repos)\s+(?:for|about|related\s+to)\s+(.+?)\s+(?:with\s+)?(?:over|at\s+least|above)\s+([\d,]+)\s+stars?$/i,
+    /^(find|recommend|suggest)\s+(?:(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+)?github\s+(?:repositories|repos)\s+(?:for|about|related\s+to)\s+(.+?)(?:\s+(?:with\s+)?(?:over|more\s+than|at\s+least|above)\s+([\d,]+)\s+stars?)?$/i,
   );
-  if (!intent) return null;
+  if (!intent || (!intent[4] && defaults?.min_stars === undefined)) return null;
   return {
     query: intent[3].trim(),
-    min_stars: Number(intent[4].replaceAll(",", "")),
-    result_count: parseCount(intent[2]),
+    min_stars: intent[4] ? Number(intent[4].replaceAll(",", "")) : defaults!.min_stars!,
+    result_count: intent[2] ? parseCount(intent[2]) : defaults?.result_count ?? 3,
   };
 }
 
@@ -70,11 +71,14 @@ export function routeCapability(
   registry: CapabilityRegistry = capabilityRegistry,
 ): CapabilityRouteDecision {
   const normalizedTask = task.trim().replace(/[.?!]+$/, "");
-  const githubParameters = extractGitHubRepositoryResearchParameters(task);
+  const githubCapability = registry
+    .findByFamily("github_repository_research")
+    .sort((left, right) => right.version - left.version)[0];
+  const githubParameters = extractGitHubRepositoryResearchParameters(task, githubCapability ? {
+    min_stars: typeof githubCapability.sourceExample.min_stars === "number" ? githubCapability.sourceExample.min_stars : 0,
+    result_count: typeof githubCapability.sourceExample.result_count === "number" ? githubCapability.sourceExample.result_count : 3,
+  } : undefined);
   if (githubParameters) {
-    const githubCapability = registry
-      .findByFamily("github_repository_research")
-      .sort((left, right) => right.version - left.version)[0];
     if (!githubCapability) {
       return noMatch("No learned GitHub repository research capability exists in shared memory.");
     }

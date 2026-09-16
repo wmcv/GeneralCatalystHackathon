@@ -30,6 +30,7 @@ const githubCapability: SemanticCapability = {
   name: "github_repository_research",
   family: "github_repository_research",
   intentSignature: "github_repository_research(query, min_stars, result_count)",
+  sourceExample: { query: "workflow orchestration", min_stars: 1000, result_count: 3 },
 };
 
 describe("capability router", () => {
@@ -128,6 +129,21 @@ describe("capability router", () => {
     expect(extractGitHubRepositoryResearchParameters(
       "Find 4 GitHub repositories for agent tooling with over 2,000 stars.",
     )).toEqual({ query: "agent tooling", min_stars: 2000, result_count: 4 });
+  });
+
+  it("extracts the demo prompt using more-than wording", () => {
+    expect(extractGitHubRepositoryResearchParameters(
+      "Find 3 GitHub repositories for browser automation with more than 1,000 stars.",
+    )).toEqual({ query: "browser automation", min_stars: 1000, result_count: 3 });
+  });
+
+  it("fills omitted GitHub constraints from the learned capability example", () => {
+    registry.addCapability(githubCapability);
+    expect(routeCapability("Find GitHub repositories for browser automation.", registry)).toMatchObject({
+      matched: true,
+      capabilityId: githubCapability.id,
+      parameters: { query: "browser automation", min_stars: 1000, result_count: 3 },
+    });
   });
 
   it("does not route GitHub research unless the family was learned", () => {

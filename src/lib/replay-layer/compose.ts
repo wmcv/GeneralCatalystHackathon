@@ -8,9 +8,12 @@ export const compositionOutputSchema = z.object({
   sections: z.array(z.object({
     heading: z.string().min(1),
     body: z.string().min(1),
-  })).min(1),
+  })).optional(),
   recommendation: z.string().min(1).optional(),
-});
+}).transform((value) => ({
+  ...value,
+  sections: value.sections?.length ? value.sections : [{ heading: value.title, body: value.summary }],
+}));
 
 export type CompositionOutput = z.infer<typeof compositionOutputSchema>;
 

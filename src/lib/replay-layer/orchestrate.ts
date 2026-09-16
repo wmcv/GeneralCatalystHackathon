@@ -100,6 +100,37 @@ function executionMetrics(outcome: DeterministicBrowserOutcome | null) {
   };
 }
 
+function learnResultComparisonCapability(
+  registry: CapabilityRegistry,
+  input: { runId: string; agentId: string; remainingTask: string },
+): SemanticCapability {
+  const existing = registry.findByFamily("result_comparison")[0];
+  if (existing) return registry.incrementSuccessfulUses(existing.id);
+  return registry.addCapability({
+    id: `result-comparison:${input.runId}`,
+    name: "result_comparison",
+    description: "Compare and summarize selected items from an existing structured result.",
+    intentSignature: "result_comparison(structured_result, comparison_request)",
+    family: "result_comparison",
+    version: 1,
+    parameters: [
+      { name: "structured_result", type: "string", required: true, description: "Structured output from a prior capability." },
+      { name: "comparison_request", type: "string", required: true, description: "The bounded comparison to perform." },
+    ],
+    strategy: [{ stage: "Compare results", objective: "Apply a bounded comparison to supplied structured evidence.", preferredEvidence: ["Upstream capability output"], completionCondition: "A schema-valid comparison is returned." }],
+    invariants: ["Use only the supplied structured result and do not invent new evidence."],
+    fallbackTriggers: ["The upstream result does not contain enough items to compare."],
+    learnedFromRunId: input.runId,
+    learnedByAgentId: input.agentId,
+    scope: "organization",
+    createdAt: new Date().toISOString(),
+    successfulUses: 1,
+    deterministicUses: 0,
+    executionState: "semantic",
+    sourceExample: { comparison_request: input.remainingTask },
+  });
+}
+
 export async function orchestrateReplayTask(
   input: { task: string; agentId: string },
   dependencies: ReplayOrchestratorDependencies = {
@@ -173,6 +204,8 @@ export async function orchestrateReplayTask(
     let transformation: LlmUsage | null = null;
     let compositionError: string | null = null;
     if (composing && outcome.deterministicSuccess && routing.decision.remainingTask) {
+      const knownComparison = dependencies.registry.findByFamily("result_comparison")[0];
+      if (knownComparison) record(replayTrace(runId, "replay", "✓ Known capability", knownComparison.name));
       record(replayTrace(runId, "replay", "Comparing the top two…", routing.decision.remainingTask));
       try {
         const completion = await (dependencies.postProcess ?? composeResult)({
@@ -182,7 +215,11 @@ export async function orchestrateReplayTask(
         });
         transformation = completion.usage;
         result = { capabilityResult: outcome.structuredResult, transformation: completion.data };
-        record(replayTrace(runId, "replay", "Complete."));
+        const comparisonCapability = learnResultComparisonCapability(dependencies.registry, {
+          runId, agentId: input.agentId, remainingTask: routing.decision.remainingTask,
+        });
+        record(replayTrace(runId, "replay", knownComparison ? "Comparison capability reused" : "Comparison capability learned", comparisonCapability.name));
+        if (!knownComparison) record(replayTrace(runId, "replay", "Published to collective memory."));
       } catch (error) {
         compositionError = error instanceof Error ? error.message : String(error);
         record(replayTrace(runId, "replay", "Comparison could not be completed", compositionError));
