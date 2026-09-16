@@ -85,4 +85,13 @@ describe("capability registry", () => {
       execution: { workspaceId: "workspace-1", deterministicReady: false },
     });
   });
+
+  it("rejects catch-all capabilities from collective memory", () => {
+    expect(() => registry.addCapability({
+      ...capability,
+      id: "unclassified",
+      name: "unclassified_web_task",
+      family: "unclassified_web_task",
+    })).toThrow("not reusable");
+  });
 });

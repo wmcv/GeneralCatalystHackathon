@@ -27,6 +27,10 @@ export function createInMemoryCapabilityRegistry(
   return {
     addCapability(capability) {
       const validated = semanticCapabilitySchema.parse(capability);
+      if (["unclassified_web_task", "generic_web_task", "arbitrary_task"].includes(validated.name) ||
+        ["unclassified_web_task", "generic_web_task", "arbitrary_task"].includes(validated.family)) {
+        throw new Error(`Capability ${validated.name} is not reusable and cannot enter collective memory.`);
+      }
       const existing = capabilities.get(validated.id);
       if (existing) return existing;
       capabilities.set(validated.id, validated);

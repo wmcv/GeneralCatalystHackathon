@@ -44,4 +44,13 @@ describe("GitHub capability result validation", () => {
     });
     expect(result.structuredResult).toBeNull();
   });
+
+  it("normalizes owner/name supplied as one repository name", () => {
+    const result = validateCapabilityResult(capability, { ...parameters, result_count: 1 }, {
+      repositories: [{ name: "apache/airflow", stars: 40000, url: "https://github.com/apache/airflow", description: "Workflow platform" }],
+    });
+    expect(result.structuredResult).toEqual({
+      repositories: [{ owner: "apache", name: "airflow", stars: 40000, url: "https://github.com/apache/airflow", description: "Workflow platform" }],
+    });
+  });
 });

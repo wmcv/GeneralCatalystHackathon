@@ -20,7 +20,9 @@ export interface DeterministicLearningDependencies {
   runBrowserUseV3(
     execution: NonNullable<SemanticCapability["execution"]>,
     task: string,
+    onMessage?: (message: { type: string; summary: string; data: string }) => void,
   ): Promise<DeterministicBrowserOutcome>;
+  onBrowserMessage?: (message: { type: string; summary: string; data: string }) => void;
 }
 
 export interface DeterministicLearningResult {
@@ -110,7 +112,11 @@ export async function learnDeterministicCapability(
       definition.taskTemplate,
       sourceParameters,
     );
-    outcome = await dependencies.runBrowserUseV3(learning.execution!, executionTask);
+    outcome = await dependencies.runBrowserUseV3(
+      learning.execution!,
+      executionTask,
+      dependencies.onBrowserMessage,
+    );
 
     if (outcome.sessionId) {
       dependencies.runStore.save({

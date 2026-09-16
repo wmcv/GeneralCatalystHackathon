@@ -47,6 +47,7 @@ export async function getBrowserUseV3SessionMessages(
 export async function runDeterministicBrowserUseV3(
   execution: BrowserUseCachedScriptExecution,
   task: string,
+  onMessage?: (message: { type: string; summary: string; data: string }) => void,
 ): Promise<DeterministicBrowserOutcome> {
   const wallStartedAt = Date.now();
   const { BROWSER_USE_API_KEY } = getBrowserUseEnv();
@@ -70,7 +71,14 @@ export async function runDeterministicBrowserUseV3(
   let error: string | null = null;
   const messages: MessageResponse[] = [];
   try {
-    for await (const runMessage of run) messages.push(runMessage);
+    for await (const runMessage of run) {
+      messages.push(runMessage);
+      onMessage?.({
+        type: runMessage.type,
+        summary: runMessage.summary,
+        data: runMessage.data,
+      });
+    }
     result = run.result;
   } catch (runError) {
     error = message(runError);

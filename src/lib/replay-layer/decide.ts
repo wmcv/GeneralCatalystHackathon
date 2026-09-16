@@ -10,11 +10,52 @@ import {
   type ReplayDecision,
   type ReplayDecisionRequest,
   type ReplayDecisionResult,
+  type ProposedCapability,
 } from "./types";
 
 export const REUSE_CONFIDENCE_THRESHOLD = 0.82;
+const FORBIDDEN_CAPABILITY_NAMES = new Set([
+  "unclassified_web_task",
+  "generic_web_task",
+  "arbitrary_task",
+]);
+
+function githubComposition(input: ReplayDecisionRequest): ReplayDecision | null {
+  const match = input.task.match(/^(.+?\bstars?)[,.]?\s*(?:then\s+)?(.+)$/i);
+  if (!match) return null;
+  const parameters = extractGitHubRepositoryResearchParameters(match[1]);
+  const capability = input.availableCapabilities.find((item) =>
+    item.family === "github_repository_research" &&
+    item.executionState === "deterministic_ready" &&
+    item.execution?.deterministicReady,
+  );
+  if (!parameters || !capability) return null;
+  return {
+    decision: "compose",
+    capabilityId: capability.id,
+    confidence: 0.96,
+    parameters,
+    remainingTask: match[2].trim().replace(/^then\s+/i, "").replace(/[.?!]+$/, ""),
+    reasoningSummary: "Repository discovery is already known; only the follow-up transformation requires new reasoning.",
+  };
+}
+
+export function isReusableCapabilityProposal(
+  proposal: ReplayDecision["proposedCapability"],
+): proposal is ProposedCapability {
+  if (!proposal || FORBIDDEN_CAPABILITY_NAMES.has(proposal.name) || FORBIDDEN_CAPABILITY_NAMES.has(proposal.family)) return false;
+  if (proposal.parameters.length === 0) return false;
+  if (proposal.parameters.length === 1 && proposal.parameters[0].name === "task") return false;
+  return Boolean(
+    proposal.surface?.origin ||
+    proposal.surface?.kind === "website" ||
+    /@\{\{[a-z_][a-z0-9_]*\}\}/i.test(proposal.taskTemplate),
+  );
+}
 
 function fallbackDecision(input: ReplayDecisionRequest): ReplayDecision {
+  const composition = githubComposition(input);
+  if (composition) return composition;
   const registry = createInMemoryCapabilityRegistry(new Map(
     input.availableCapabilities.map((capability) => [capability.id, capability]),
   ));
@@ -50,16 +91,9 @@ function fallbackDecision(input: ReplayDecisionRequest): ReplayDecision {
   }
   return {
     decision: "learn",
-    reasoningSummary: "Routing failed safely; an exploratory run is required.",
+    reasoningSummary: "No stable reusable abstraction was identified; run once without publishing memory.",
     confidence: 0,
-    proposedCapability: {
-      name: "unclassified_web_task",
-      description: "A web task awaiting safe capability induction.",
-      family: "unclassified_web_task",
-      surface: { kind: "web" },
-      parameters: [{ name: "task", type: "string", description: "The requested task.", value: input.task }],
-      taskTemplate: "Complete this web task: @{{task}}. Return structured JSON.",
-    },
+    reusable: false,
   };
 }
 
@@ -71,7 +105,11 @@ function mentionedOrigin(task: string): string | null {
 }
 
 function safeDecision(input: ReplayDecisionRequest, proposed: ReplayDecision): ReplayDecision {
-  if (proposed.decision === "learn") return proposed;
+  if (proposed.decision === "learn") {
+    return isReusableCapabilityProposal(proposed.proposedCapability)
+      ? proposed
+      : { decision: "learn", reasoningSummary: proposed.reasoningSummary, confidence: proposed.confidence, reusable: false };
+  }
   const capability = input.availableCapabilities.find((item) => item.id === proposed.capabilityId);
   if (!capability || capability.executionState !== "deterministic_ready" || !capability.execution?.deterministicReady) {
     return fallbackDecision({ ...input, availableCapabilities: [] });

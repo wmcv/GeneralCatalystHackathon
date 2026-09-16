@@ -17,18 +17,24 @@ export const proposedCapabilitySchema = z.object({
 });
 
 export const replayDecisionSchema = z.object({
-  decision: z.enum(["reuse", "learn"]),
+  decision: z.enum(["reuse", "compose", "learn"]),
   reasoningSummary: z.string().min(1),
   capabilityId: z.string().min(1).optional(),
   confidence: z.number().min(0).max(1),
   parameters: z.record(z.string(), valueSchema).optional(),
+  remainingTask: z.string().min(1).optional(),
+  reusable: z.boolean().optional(),
   proposedCapability: proposedCapabilitySchema.optional(),
 }).superRefine((decision, context) => {
-  if (decision.decision === "reuse" && (!decision.capabilityId || !decision.parameters)) {
-    context.addIssue({ code: "custom", message: "Reuse requires a capability and parameters." });
+  if ((decision.decision === "reuse" || decision.decision === "compose") &&
+    (!decision.capabilityId || !decision.parameters)) {
+    context.addIssue({ code: "custom", message: "Reuse and composition require a capability and parameters." });
   }
-  if (decision.decision === "learn" && !decision.proposedCapability) {
-    context.addIssue({ code: "custom", message: "Learning requires a proposed capability." });
+  if (decision.decision === "compose" && !decision.remainingTask) {
+    context.addIssue({ code: "custom", message: "Composition requires a remaining task." });
+  }
+  if (decision.decision === "learn" && !decision.proposedCapability && decision.reusable !== false) {
+    context.addIssue({ code: "custom", message: "Learning requires a proposal or an explicit non-reusable decision." });
   }
 });
 

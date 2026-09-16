@@ -41,6 +41,27 @@ describe("Replay decision engine", () => {
     expect(result.decision).toMatchObject({ decision: "reuse", capabilityId: "github-capability", parameters: reuse.parameters });
   });
 
+  it("composes GitHub discovery with a preserved follow-up task", async () => {
+    const decision: ReplayDecision = {
+      decision: "compose",
+      reasoningSummary: "Discovery is known; comparison remains.",
+      capabilityId: "github-capability",
+      confidence: 0.97,
+      parameters: { query: "workflow orchestration", min_stars: 1000, result_count: 3 },
+      remainingTask: "Compare the top two returned repositories.",
+    };
+    const result = await decideReplay({
+      task: "Find 3 GitHub repositories for workflow orchestration with over 1,000 stars, then compare the top two.",
+      availableCapabilities: [capability()],
+    }, adapter(decision));
+    expect(result.decision).toMatchObject({
+      decision: "compose",
+      capabilityId: "github-capability",
+      parameters: { query: "workflow orchestration", min_stars: 1000, result_count: 3 },
+      remainingTask: "Compare the top two returned repositories.",
+    });
+  });
+
   it("does not accept an invented capability id", async () => {
     const result = await decideReplay({ task: "Research vendors", availableCapabilities: [capability()] }, adapter({ ...reuse, capabilityId: "invented" }));
     expect(result.decision.decision).toBe("learn");
@@ -55,6 +76,20 @@ describe("Replay decision engine", () => {
     const malformed = { completeJson: async () => { throw new Error("invalid JSON"); } } as LlmAdapter;
     const result = await decideReplay({ task: "Research an unfamiliar vendor", availableCapabilities: [] }, malformed);
     expect(result).toMatchObject({ fallbackUsed: true, decision: { decision: "learn" } });
+  });
+
+  it("falls back to composition for a known GitHub step plus a follow-up", async () => {
+    const malformed = { completeJson: async () => { throw new Error("invalid JSON"); } } as LlmAdapter;
+    const result = await decideReplay({
+      task: "Find 3 GitHub repositories for workflow orchestration with over 1,000 stars, then compare the top two.",
+      availableCapabilities: [capability()],
+    }, malformed);
+    expect(result.decision).toMatchObject({
+      decision: "compose",
+      capabilityId: "github-capability",
+      parameters: { query: "workflow orchestration", min_stars: 1000, result_count: 3 },
+      remainingTask: "compare the top two",
+    });
   });
 
   it("falls back to learning for low confidence, non-ready memory, and surface mismatch", async () => {
