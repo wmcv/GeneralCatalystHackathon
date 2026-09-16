@@ -1,5 +1,5 @@
-import ReplayDemo from "./replay-demo";
+import TaskInterface from "./task-interface";
 
 export default function Home() {
-  return <ReplayDemo />;
+  return <TaskInterface />;
 }

@@ -1,7 +1,7 @@
 import type { RunEvent } from "browser-use-sdk/v4";
 import { traceEventSchema, type TraceEvent } from "./types";
 
-type TraceFields = Omit<TraceEvent, "id" | "runId" | "timestamp" | "rawEventType">;
+type TraceFields = Omit<TraceEvent, "id" | "runId" | "timestamp" | "rawEventType" | "actor">;
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -161,6 +161,7 @@ export function normalizeBrowserUseEvent(event: RunEvent): TraceEvent | null {
     id: `browser-use:${event.runId}:${event.id}`,
     runId: event.runId,
     timestamp: event.ts,
+    actor: "agent",
     rawEventType: event.type,
     ...fields,
   });

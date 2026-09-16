@@ -9,10 +9,13 @@ export const traceEventCategorySchema = z.enum([
   "result",
 ]);
 
+export const traceActorSchema = z.enum(["user", "replay", "agent", "executor"]);
+
 export const traceEventSchema = z.object({
   id: z.string().min(1),
   runId: z.string().min(1),
   timestamp: z.string().datetime(),
+  actor: traceActorSchema,
   category: traceEventCategorySchema,
   kind: z.string().min(1),
   label: z.string().min(1),
@@ -23,3 +26,4 @@ export const traceEventSchema = z.object({
 });
 
 export type TraceEvent = z.infer<typeof traceEventSchema>;
+export type TraceActor = z.infer<typeof traceActorSchema>;

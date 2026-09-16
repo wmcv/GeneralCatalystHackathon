@@ -8,7 +8,9 @@ import type { SemanticCapability } from "../domain/capability";
 
 export type CapabilityStructuredResult =
   | BrowserUseSpikeResult
-  | GitHubRepositoryResearchResult;
+  | GitHubRepositoryResearchResult
+  | Record<string, unknown>
+  | unknown[];
 
 export function validateCapabilityResult(
   capability: SemanticCapability,
@@ -37,13 +39,25 @@ export function validateCapabilityResult(
     return { structuredResult: parsed.data, validationError: null };
   }
 
-  const parsed = browserUseSpikeResultSchema.safeParse(value);
-  if (!parsed.success) return { structuredResult: null, validationError: parsed.error.message };
-  const expectedCount = Number(parameters.result_count);
-  return parsed.data.products.length === expectedCount
-    ? { structuredResult: parsed.data, validationError: null }
-    : {
-        structuredResult: null,
-        validationError: `Expected ${expectedCount} products but received ${parsed.data.products.length}.`,
-      };
+  if (capability.family === "comparative_product_research") {
+    const parsed = browserUseSpikeResultSchema.safeParse(value);
+    if (!parsed.success) return { structuredResult: null, validationError: parsed.error.message };
+    const expectedCount = Number(parameters.result_count);
+    return parsed.data.products.length === expectedCount
+      ? { structuredResult: parsed.data, validationError: null }
+      : {
+          structuredResult: null,
+          validationError: `Expected ${expectedCount} products but received ${parsed.data.products.length}.`,
+        };
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0
+      ? { structuredResult: value, validationError: null }
+      : { structuredResult: null, validationError: "The result list is empty." };
+  }
+  if (value && typeof value === "object" && Object.keys(value).length > 0) {
+    return { structuredResult: value as Record<string, unknown>, validationError: null };
+  }
+  return { structuredResult: null, validationError: "The task returned no structured result." };
 }

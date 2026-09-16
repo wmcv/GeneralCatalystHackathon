@@ -23,7 +23,7 @@ export const browserUseCachedScriptExecutionSchema = z.object({
   autoHeal: z.literal(false),
   deterministicReady: z.boolean(),
   surface: z.object({
-    kind: z.literal("website"),
+    kind: z.enum(["website", "web"]),
     origin: z.url(),
   }).optional(),
 });
@@ -52,6 +52,10 @@ export const semanticCapabilitySchema = z.object({
   successfulUses: z.number().int().nonnegative(),
   deterministicUses: z.number().int().nonnegative(),
   lastUsedAt: z.string().datetime().optional(),
+  surface: z.object({
+    kind: z.enum(["website", "web"]),
+    origin: z.url().optional(),
+  }).optional(),
   executionState: capabilityExecutionStateSchema,
   execution: browserUseCachedScriptExecutionSchema.optional(),
   sourceExample: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),

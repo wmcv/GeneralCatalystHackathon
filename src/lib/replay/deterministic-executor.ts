@@ -115,8 +115,9 @@ function rejected(
 export async function executeRoutedDeterministicCapability(
   input: { task: string; requestingAgentId: string },
   dependencies: DeterministicExecutorDependencies,
+  suppliedDecision?: CapabilityRouteDecision,
 ): Promise<DeterministicExecutionResult> {
-  const routeDecision = routeCapability(input.task, dependencies.registry);
+  const routeDecision = suppliedDecision ?? routeCapability(input.task, dependencies.registry);
   if (!routeDecision.matched || !routeDecision.capabilityId || !routeDecision.parameters) {
     return rejected(input, routeDecision);
   }

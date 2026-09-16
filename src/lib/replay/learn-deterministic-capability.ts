@@ -33,6 +33,11 @@ export interface DeterministicLearningResult {
   error: string | null;
 }
 
+export interface DeterministicDefinition {
+  taskTemplate: string;
+  surface?: { kind: "website" | "web"; origin?: string };
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -43,7 +48,7 @@ function numberOrUndefined(value: string | null): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function deterministicDefinition(capability: SemanticCapability) {
+function deterministicDefinition(capability: SemanticCapability): DeterministicDefinition {
   if (capability.family === "github_repository_research") {
     return {
       taskTemplate: githubRepositoryResearchTaskTemplate,
@@ -74,11 +79,12 @@ export async function learnDeterministicCapability(
   capability: SemanticCapability,
   sourceParameters: DeterministicParameters,
   dependencies: DeterministicLearningDependencies,
+  proposedDefinition?: DeterministicDefinition,
 ): Promise<DeterministicLearningResult> {
   if (capability.executionState !== "semantic" || capability.execution) {
     throw new Error(`Capability ${capability.id} is not awaiting deterministic learning.`);
   }
-  const definition = deterministicDefinition(capability);
+  const definition = proposedDefinition ?? deterministicDefinition(capability);
 
   let workspaceId: string | null = null;
   let executionTask: string | null = null;
@@ -96,7 +102,9 @@ export async function learnDeterministicCapability(
       taskTemplate: definition.taskTemplate,
       cacheScript: true,
       autoHeal: false,
-      ...("surface" in definition ? { surface: definition.surface } : {}),
+      ...(definition.surface?.origin
+        ? { surface: { kind: definition.surface.kind, origin: definition.surface.origin } }
+        : {}),
     });
     executionTask = renderParameterizedTaskTemplate(
       definition.taskTemplate,

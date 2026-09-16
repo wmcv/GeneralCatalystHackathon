@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Replay",
-  description: "One agent learns. Every agent remembers.",
+  description: "Shared procedural memory for AI agents.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
