@@ -1,12 +1,13 @@
 # Replay
+Replay turns browser-agent exploration into reusable deterministic workflows.
+An agent completes a task once, Replay records what it learned, then future runs can execute the same workflow with **0 AI calls, 0 tokens, and 0 inference cost**.
+Built at the General Catalyst Hackathon in Waterloo.
 
-Replay is a hackathon MVP exploring how autonomous browser agents can learn reusable semantic capabilities.
+## Demo
+https://replay-general-catalyst-hackathon.vercel.app/
 
-## Development
+## System
+![System Diagram](./SystemDiagram.png)
 
-```bash
-npm install
-npm run dev
-```
-
-Browser Use and OpenRouter credentials are optional until their integrations are implemented. Copy `.env.example` to `.env.local` when those milestones begin.
+## Stack
+Next.js, TypeScript, Browser Use, Browserbase, Stagehand, SSE
